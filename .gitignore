@@ -1,0 +1,19 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.idea/
+.DS_Store
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Database (Optional: Uncomment to exclude database from github)
+# anime_tracker.db
+# backend/anime_tracker.db
