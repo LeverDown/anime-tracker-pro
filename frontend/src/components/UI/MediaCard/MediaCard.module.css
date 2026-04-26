@@ -1,0 +1,125 @@
+.cardContainer {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: var(--bg-card);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  transition: border-color var(--transition-fast);
+  cursor: pointer;
+  clip-path: var(--tactical-corner); /* Tactical RDS Geometry */
+}
+
+.cardContainer:hover {
+  border-color: var(--primary-color);
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--transition-smooth);
+}
+
+.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(transparent, var(--bg-deep));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--space-4);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.cardContainer:hover .overlay {
+  opacity: 1;
+}
+
+.cardContainer:hover .poster {
+  transform: scale(1.05);
+}
+
+.content {
+  transform: translateY(10px);
+  transition: transform var(--transition-smooth);
+}
+
+.cardContainer:hover .content {
+  transform: translateY(0);
+}
+
+.title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-black);
+  color: var(--text-main);
+  line-height: 1.2;
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+}
+
+.studio {
+  font-size: var(--font-size-xs);
+  color: var(--primary-color);
+  opacity: 0.6;
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  margin-bottom: var(--space-2);
+}
+
+.meta {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-dim);
+}
+
+.synopsis {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: var(--space-2);
+}
+
+/* Interaction States */
+.loadingBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: var(--primary-color);
+  filter: drop-shadow(0 0 5px var(--primary-glow));
+  animation: hud-scan 1.5s infinite linear;
+}
+
+.statusIndicator {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.statusSuccess { background: var(--success); filter: drop-shadow(0 0 5px var(--success)); }
+.statusError { background: var(--danger); filter: drop-shadow(0 0 5px var(--danger)); }
+.statusLoading { background: var(--primary-color); filter: drop-shadow(0 0 5px var(--primary-glow)); }

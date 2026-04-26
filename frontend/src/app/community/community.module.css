@@ -1,0 +1,162 @@
+.container {
+  position: relative;
+}
+
+.header {
+  margin-bottom: var(--space-12);
+}
+
+.title {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-6);
+  font-weight: var(--font-weight-black);
+}
+
+.titlePrefix {
+  color: var(--primary-color);
+}
+
+.toolbar {
+  padding: var(--space-5);
+  display: flex;
+  gap: var(--space-6);
+  align-items: center;
+}
+
+.toolbarLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-extrabold);
+}
+
+.feedContainer {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.activityCard {
+  margin-bottom: var(--space-6);
+  padding: var(--space-6);
+}
+
+.activityLayout {
+  display: flex;
+  gap: var(--space-5);
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-black);
+  color: white;
+  box-shadow: 0 0 15px var(--primary-glow);
+  flex-shrink: 0;
+}
+
+.mainContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.userLabel {
+  font-weight: var(--font-weight-black);
+  color: white;
+  font-size: var(--font-size-md);
+}
+
+.actionLabel {
+  color: var(--text-dim);
+  font-size: var(--font-size-sm);
+  margin-left: var(--space-2);
+}
+
+.timestamp {
+  font-size: var(--font-size-xs);
+  color: var(--text-dark);
+}
+
+.subjectPanel {
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--glass-shine);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+}
+
+.subjectTitle {
+  color: var(--primary-color);
+  font-weight: var(--font-weight-black);
+  font-size: var(--font-size-sm);
+}
+
+.subjectDetail {
+  margin-left: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--font-size-xs);
+}
+
+.engagement {
+  display: flex;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+
+.engagementButton {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-dark);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.engagementButton:hover {
+  color: var(--primary-color);
+}
+
+.emptyState {
+  text-align: center;
+  padding: var(--space-20);
+  border: 1px dashed var(--glass-border);
+  border-radius: var(--radius-lg);
+}
+
+.emptyText {
+  color: var(--text-dim);
+  font-weight: var(--font-weight-extrabold);
+  letter-spacing: var(--tracking-widest);
+}
+
+.skeletonCard {
+  height: 120px;
+  margin-bottom: var(--space-6);
+  background: var(--bg-panel);
+  opacity: 0.2;
+  border-radius: var(--radius-lg);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.1; }
+}

@@ -1,0 +1,205 @@
+.sidebar {
+  width: var(--sidebar-width);
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--glass-border);
+  border-radius: 0;
+}
+
+.sidebar a {
+  text-decoration: none !important;
+  color: inherit;
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-8) var(--space-5);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-10);
+  padding: 0 var(--space-2);
+}
+
+.logo {
+  background: var(--primary-color);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 var(--space-5) var(--primary-glow);
+  display: flex;
+}
+
+.brandTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-black);
+  letter-spacing: var(--tracking-wide);
+}
+
+.sectionLabel {
+  padding: 0 var(--space-4);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-extrabold);
+  color: var(--text-dark);
+  letter-spacing: var(--tracking-widest);
+  margin-bottom: var(--space-4);
+  margin-top: var(--space-8);
+}
+
+.sectionLabel:first-of-type {
+  margin-top: 0;
+}
+
+.navGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.navButton {
+  justify-content: flex-start !important;
+}
+
+.footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.userProfile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.userProfile:hover {
+  background: var(--bg-panel);
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-black);
+  box-shadow: 0 0 var(--space-3) var(--primary-glow);
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.userName {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-main);
+}
+
+.userStatus {
+  font-size: var(--font-size-xs);
+  color: var(--text-dark);
+}
+
+.notifWrapper {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: var(--primary-color);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: var(--font-size-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: var(--font-weight-black);
+  box-shadow: 0 0 var(--space-2) var(--primary-glow);
+}
+
+.notifPanel {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% + var(--space-4));
+  width: 320px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--glass-border);
+  z-index: 500;
+}
+
+.notifHeader {
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--glass-border);
+  background: var(--glass-shine);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notifHeaderLabel {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-black);
+  letter-spacing: var(--tracking-wider);
+}
+
+.notifList {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+.notifCard {
+  padding: var(--space-4);
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.notifUnread {
+  background: var(--bg-panel);
+}
+
+.notifMessage {
+  font-size: var(--font-size-md);
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+.notifTime {
+  font-size: var(--font-size-xs);
+  color: var(--text-dark);
+  margin-top: var(--space-2);
+  display: block;
+}
+
+.emptyNotifs {
+  padding: var(--space-8);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-dark);
+}

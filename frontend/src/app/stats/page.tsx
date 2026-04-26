@@ -1,121 +1,179 @@
 "use client";
-import { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, JSX, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { BarChart3, TrendingUp, Clock, Zap, Star, Activity, PieChart } from 'lucide-react';
 import { AuthContext } from '../AuthContext';
 import api from '../../api/client';
+import { Button, Card } from '../../components/UI';
+import styles from './stats.module.css';
 
-export default function StatsPage() {
-  const { user } = useContext(AuthContext);
-  const [data, setData] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+/* eslint-disable react-hooks/set-state-in-effect */
+
+/**
+ * StatsPage Protocol — v2.0 (Neural Analytics)
+ * Enforces synchronized backend-to-frontend metric mapping and RDS aesthetics.
+ */
+export default function StatsPage(): JSX.Element {
+  const auth = useContext(AuthContext);
+  const user = auth?.user;
+  const [stats, setStats] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [mounted, setMounted] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!user) return;
-    api.get('/collection', { params: { username: user, status_filter: 'All' } })
-      .then(res => setData(res.data.data))
-      .finally(() => setLoading(false));
-  }, [user]);
+    setMounted(true);
+  }, []);
 
-  if (loading) return <p style={{ color: '#aaa' }}>Loading stats…</p>;
-  if (!data.length) return (
-    <div>
-      <h1 style={{ color: 'var(--primary-color)', fontSize: '2rem', marginBottom: '1rem' }}>📊 My Stats</h1>
-      <p style={{ color: '#666' }}>No data yet! Add some anime to your collection first.</p>
-    </div>
-  );
+  useEffect(() => {
+    if (!user || !mounted) return;
+    
+    setLoading(true);
+    api.get(`/user/stats/${user}`)
+      .then(r => {
+        setStats(r.data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [user, mounted]);
 
-  // Calculate stats
-  let totalEpsWatched = 0;
-  const statusCounts: Record<string, number> = {};
-  const genreCounts: Record<string, number> = {};
-  let scoredCount = 0; let totalScore = 0;
+  const genreData = useMemo(() => {
+    if (!stats?.genre_counts) return [];
+    return Object.entries(stats.genre_counts)
+      .sort(([, a]: any, [, b]: any) => b - a)
+      .slice(0, 10);
+  }, [stats]);
 
-  for (const entry of data) {
-    // Episodes
-    if (entry.seasons_json) {
-      try {
-        const seasons = JSON.parse(entry.seasons_json);
-        for (const s of seasons) totalEpsWatched += (s.watched || 0);
-      } catch {}
-    }
+  const handleGenerateReport = () => {
+    if (!stats) return;
+    const report = `
+// RONINHUB_NEURAL_ANALYTICS_REPORT
+// GENERATED: ${new Date().toLocaleString()}
+// USER: ${user}
 
-    // Status
-    statusCounts[entry.status] = (statusCounts[entry.status] || 0) + 1;
+--------------------------------------------------
+[METRIC_SUMMARY]
+> TITLES_SYNCED: ${stats.total_anime}
+> EPISODES_WATCHED: ${stats.total_episodes}
+> MEAN_SCORE: ${stats.mean_score?.toFixed(2)}
+> TIME_INVESTED: ${Math.floor((stats.total_episodes || 0) * 23 / 60)}h
 
-    // Genres
-    if (entry.genres) {
-      for (const g of entry.genres.split(',')) {
-        const trimmed = g.trim();
-        if (trimmed) genreCounts[trimmed] = (genreCounts[trimmed] || 0) + 1;
-      }
-    }
+[GENRE_DNA_DISTRIBUTION]
+${genreData.map(([genre, count]: any) => `> ${genre.padEnd(20)} | ${count} TITLES (${((count / (stats?.total_anime || 1)) * 100).toFixed(1)}%)`).join('\n')}
 
-    // Scores
-    if (entry.score > 0) { totalScore += entry.score; scoredCount++; }
-  }
+--------------------------------------------------
+// END_OF_TRANSMISSION
+    `.trim();
 
-  const totalHours = (totalEpsWatched * 24) / 60;
-  const avgScore = scoredCount > 0 ? (totalScore / scoredCount).toFixed(2) : '—';
-  const topGenre = Object.entries(genreCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
-  const tasteMap: Record<string, string> = {
-    "Action": "Shounen Junkie", "Romance": "Romance Connoisseur", "Comedy": "Gag Master",
-    "Fantasy": "Isekai Protagonist", "Sci-Fi": "Futurist", "Drama": "Tearjerker Collector",
-    "Slice of Life": "Cozy Watcher", "Horror": "Thrill Seeker"
+    const blob = new Blob([report], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `neural_report_${user}_${Date.now()}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
-  const tasteProfile = tasteMap[topGenre] ?? `${topGenre} Enthusiast`;
 
-  const cardStyle = { background: 'rgba(20,20,35,0.92)', border: '1px solid rgba(255,0,85,0.25)', borderRadius: '10px', padding: '1.5rem', textAlign: 'center' as const };
-  const numStyle = { fontSize: '2.5rem', fontFamily: 'Orbitron, sans-serif', color: 'var(--primary-color)', marginBottom: '0.4rem' };
-  const labelStyle = { fontSize: '0.85rem', color: '#aaa' };
+  if (!mounted) return <div className={styles.skeletonCard} />;
+  if (!user) return <div className={styles.emptyState}><p className={styles.emptyText}>PLEASE INITIALIZE SESSION TO VIEW ANALYTICS.</p></div>;
 
   return (
-    <div>
-      <h1 style={{ color: 'var(--primary-color)', fontSize: '2rem', marginBottom: '1.5rem' }}>📊 My Otaku Stats</h1>
+    <div className={styles.container}>
+      <header className={styles.header}>
+        <motion.h1 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className={styles.title}
+        >
+          <span className={styles.titlePrefix}>{"//"}</span> NEURAL_ANALYTICS
+        </motion.h1>
 
-      {/* Metric Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={cardStyle}><div style={numStyle}>{data.length}</div><div style={labelStyle}>Total Titles</div></div>
-        <div style={cardStyle}><div style={numStyle}>{totalEpsWatched}</div><div style={labelStyle}>Episodes Watched</div></div>
-        <div style={cardStyle}><div style={numStyle}>{Math.floor(totalHours)}h</div><div style={labelStyle}>Hours Watched</div></div>
-        <div style={cardStyle}><div style={numStyle}>{avgScore}</div><div style={labelStyle}>Avg Score</div></div>
-      </div>
+        <Card className={styles.reportCard}>
+          <div className={styles.reportLabel}>
+            <Zap size={18} color="var(--primary-color)" />
+            NEURAL_METRICS_ACTIVE
+          </div>
+          <div style={{ flex: 1 }} />
+          <Button variant="tactical" icon={<Star size={16} />} onClick={handleGenerateReport}>GENERATE_REPORT</Button>
+        </Card>
+      </header>
 
-      {/* Taste Profile */}
-      <div style={{ ...cardStyle, textAlign: 'left', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-        <div style={{ fontSize: '3rem' }}>🏆</div>
-        <div>
-          <div style={{ fontSize: '0.85rem', color: '#aaa', marginBottom: '0.25rem' }}>Your Taste Profile</div>
-          <div style={{ fontSize: '1.6rem', fontFamily: 'Orbitron, sans-serif', color: 'white' }}>{tasteProfile}</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--primary-color)', marginTop: '0.2rem' }}>Top genre: {topGenre}</div>
+      {loading ? (
+        <div className={styles.metricsGrid}>
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className={styles.skeletonCard} />)}
         </div>
-      </div>
+      ) : (
+        <>
+          <div className={styles.metricsGrid}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <Card className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--primary-color)' }}><BarChart3 size={32} /></div>
+                <h2 className={styles.metricValue}>{stats?.total_anime || 0}</h2>
+                <p className={styles.metricLabel}>TITLES_SYNCED</p>
+              </Card>
+            </motion.div>
 
-      {/* Status Distribution */}
-      <h2 style={{ color: 'white', fontSize: '1.1rem', marginBottom: '1rem', fontFamily: 'Orbitron, sans-serif' }}>Status Breakdown</h2>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '2rem' }}>
-        {Object.entries(statusCounts).map(([status, count]) => {
-          const pct = Math.round((count / data.length) * 100);
-          return (
-            <div key={status}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px', color: '#ccc' }}>
-                <span>{status}</span><span>{count} ({pct}%)</span>
-              </div>
-              <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${pct}%`, background: 'var(--primary-color)', borderRadius: '4px', transition: 'width 0.6s ease' }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Card className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--accent-cyan)' }}><Clock size={32} /></div>
+                <h2 className={styles.metricValue}>{stats?.total_episodes || 0}</h2>
+                <p className={styles.metricLabel}>EPISODES_WATCHED</p>
+              </Card>
+            </motion.div>
 
-      {/* Top Genres */}
-      <h2 style={{ color: 'white', fontSize: '1.1rem', marginBottom: '1rem', fontFamily: 'Orbitron, sans-serif' }}>Top Genres</h2>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-        {Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([g, count]) => (
-          <span key={g} style={{ padding: '4px 12px', borderRadius: '20px', background: 'rgba(255,0,85,0.15)', border: '1px solid rgba(255,0,85,0.4)', fontSize: '0.82rem', color: '#eee' }}>
-            {g} <span style={{ color: 'var(--primary-color)' }}>×{count}</span>
-          </span>
-        ))}
-      </div>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Card className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--warning)' }}><TrendingUp size={32} /></div>
+                <h2 className={styles.metricValue}>{stats?.mean_score?.toFixed(2) || '0.00'}</h2>
+                <p className={styles.metricLabel}>MEAN_SCORE</p>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+              <Card className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--success)' }}><Activity size={32} /></div>
+                <h2 className={styles.metricValue}>{Math.floor((stats?.total_episodes || 0) * 23 / 60)}h</h2>
+                <p className={styles.metricLabel}>TIME_INVESTED</p>
+              </Card>
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <Card className={styles.genreCard}>
+              <h3 className={styles.genreTitle}>
+                <PieChart size={18} style={{ marginRight: '0.75rem', verticalAlign: 'middle' }} />
+                GENRE_DISTRIBUTION_ANALYSIS
+              </h3>
+              
+              {genreData.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-dark)' }}>NO_GENRE_DATA_SYNCED</div>
+              ) : (
+                <div className={styles.genreList}>
+                  {genreData.map(([genre, count]: any) => (
+                    <div key={genre} className={styles.genreItem}>
+                      <div className={styles.genreInfo}>
+                        <span className={styles.genreName}>{genre}</span>
+                        <span className={styles.genreCount}>{count} TITLES</span>
+                      </div>
+                      <div className={styles.barTrack}>
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(count / (stats?.total_anime || 1)) * 100}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className={styles.barFill}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </motion.div>
+        </>
+      )}
     </div>
   );
 }

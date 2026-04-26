@@ -1,0 +1,157 @@
+.container {
+  padding-bottom: var(--space-8);
+}
+
+.title {
+  color: var(--primary-color);
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-1);
+}
+
+.subtitle {
+  color: var(--text-dark);
+  margin-bottom: var(--space-8);
+  font-size: var(--font-size-md);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.statCard {
+  text-align: center;
+}
+
+.statValue {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-black);
+}
+
+.statPrimary { color: var(--primary-color); }
+.statWarning { color: var(--warning); }
+.statDanger { color: var(--danger); }
+
+.statLabel {
+  font-size: var(--font-size-xs);
+  color: var(--text-dark);
+  margin-top: var(--space-1);
+}
+
+.timeToClear {
+  grid-column: span 2;
+}
+
+.rouletteSection {
+  margin-bottom: var(--space-8);
+  text-align: center;
+}
+
+.rouletteTitle {
+  color: var(--text-main);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-4);
+  letter-spacing: var(--tracking-wide);
+}
+
+.rouletteContent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.rouletteImage {
+  width: 80px;
+  height: 115px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--primary-color);
+  transition: transform 0.3s, opacity 0.3s;
+}
+
+.rouletteSpinning {
+  transform: scale(0.8) rotate(-5deg);
+  opacity: 0.3;
+}
+
+.rouletteInfo {
+  text-align: left;
+}
+
+.rouletteAnimeTitle {
+  font-size: var(--font-size-lg);
+  color: var(--text-main);
+  font-weight: var(--font-weight-bold);
+  margin-bottom: var(--space-1);
+}
+
+.rouletteAnimeSubtitle {
+  font-size: var(--font-size-md);
+  color: var(--text-dim);
+}
+
+.listHeader {
+  color: var(--text-main);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--space-4);
+  letter-spacing: var(--tracking-wide);
+}
+
+.backlogList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.backlogItem {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.itemIndex {
+  font-size: var(--font-size-xs);
+  color: var(--text-dark);
+  width: 24px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.itemImage {
+  width: 40px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.itemContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.itemTitle {
+  color: var(--text-main);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemMeta {
+  color: var(--text-dark);
+  font-size: var(--font-size-xs);
+}
+
+.emptyState {
+  color: var(--text-dark);
+  text-align: center;
+  padding: var(--space-12);
+}

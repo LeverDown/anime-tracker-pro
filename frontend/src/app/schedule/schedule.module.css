@@ -1,0 +1,246 @@
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: var(--space-10);
+}
+
+.titleArea {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-8);
+}
+
+.title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-black);
+  letter-spacing: var(--tracking-wide);
+}
+
+.titlePrefix {
+  color: var(--primary-color);
+}
+
+.statusIndicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-black);
+  color: var(--text-dark);
+  letter-spacing: 2px;
+}
+
+.dayNav {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-1);
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+}
+
+.dayButton {
+  flex: 1;
+  padding: var(--space-3) 0;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: var(--font-weight-black);
+  letter-spacing: 1px;
+  cursor: pointer;
+  position: relative;
+  transition: var(--transition-fast);
+  border-radius: var(--radius-sm);
+}
+
+.dayButton:hover {
+  color: var(--text-main);
+  background: var(--glass-shine);
+}
+
+.dayButtonActive {
+  color: var(--primary-color);
+}
+
+.dayUnderline {
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  width: 80%;
+  height: 2px;
+  background: var(--primary-color);
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+/* Schedule Grid */
+.scheduleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
+  gap: var(--space-6);
+}
+
+/* Horizontal Card */
+.horizontalCard {
+  display: flex;
+  height: 240px;
+  padding: 0 !important;
+  overflow: hidden;
+  background: var(--bg-card) !important;
+  border-color: var(--glass-border) !important;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.horizontalCard:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary-color) !important;
+}
+
+.posterSection {
+  width: 170px;
+  height: 100%;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studioLabel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 8px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.9));
+  font-size: 10px;
+  font-weight: var(--font-weight-black);
+  color: var(--primary-color);
+  text-transform: uppercase;
+}
+
+.contentSection {
+  flex: 1;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.mainInfo {
+  min-width: 0;
+}
+
+.animeTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-black);
+  color: var(--text-main);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.airingTime {
+  font-size: var(--font-size-xs);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  font-weight: var(--font-weight-bold);
+}
+
+.statsArea {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-black);
+}
+
+.synopsis {
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-bottom: auto;
+}
+
+.cardFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: var(--space-4);
+}
+
+.tags {
+  display: flex;
+  gap: 8px;
+}
+
+.tag {
+  padding: 4px 12px;
+  background: var(--bg-panel);
+  color: var(--primary-color);
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: var(--font-weight-black);
+  letter-spacing: 0.5px;
+}
+
+.actionBtn {
+  background: var(--bg-panel) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-dim) !important;
+}
+
+.actionBtn:hover {
+  background: var(--primary-color) !important;
+  color: white !important;
+  box-shadow: 0 0 15px var(--primary-glow);
+}
+
+.emptyState {
+  grid-column: 1 / -1;
+  padding: var(--space-20);
+  text-align: center;
+  color: var(--text-dark);
+  font-weight: var(--font-weight-black);
+  font-size: var(--font-size-md);
+  letter-spacing: 4px;
+}
+
+.skeletonCard {
+  height: 240px;
+  background: var(--bg-card);
+  border-radius: var(--radius-md);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.8; }
+  100% { opacity: 0.6; }
+}
