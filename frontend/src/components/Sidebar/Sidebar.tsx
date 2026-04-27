@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Compass, Trophy, Calendar, 
   Library, Bell, LogOut, Zap, Sparkles,
-  Users, BarChart3, Settings as SettingsIcon
+  Users, BarChart3, Settings as SettingsIcon, Dices
 } from 'lucide-react';
 import { AuthContext } from '../../app/AuthContext';
 import api from '../../api/client';
@@ -75,6 +75,7 @@ export default function Sidebar(): JSX.Element {
 
   const memberZone = [
     { name: 'My Collection', icon: <Library size={20} />, path: '/collection' },
+    { name: 'Backlog Roulette', icon: <Dices size={20} />, path: '/backlog' },
     { name: 'Stats', icon: <BarChart3 size={20} />, path: '/stats' },
     { name: 'Settings', icon: <SettingsIcon size={20} />, path: '/settings' },
   ];

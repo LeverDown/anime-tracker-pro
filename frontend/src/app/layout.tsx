@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation';
 import { AuthProvider, AuthContext } from './AuthContext';
 import api, { BACKEND_URL } from '../api/client';
 import { Sidebar } from '../components/Sidebar';
+import { hexToHSL } from '@/utils/color';
+import { getUserProfile, getUserThemeSelection } from '@/api/user';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,8 +18,12 @@ function ThemeManager({ children }: { children: React.ReactNode }): JSX.Element 
   const applyTheme = useCallback((color: string, banner: string): void => {
     if (color) {
       document.documentElement.style.setProperty('--primary-color', color);
-      const glowColor = color.startsWith('#') ? color : '#ff0055';
-      document.documentElement.style.setProperty('--primary-glow', `${glowColor}66`);
+      
+      // Calculate HSL for Tactical HUD sync (Modern Space-Separated Syntax)
+      const hsl = hexToHSL(color);
+      if (hsl) {
+        document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
+      }
     }
     if (banner) {
       const base = banner.startsWith('/') ? `${BACKEND_URL}${banner}` : banner;
@@ -28,6 +34,7 @@ function ThemeManager({ children }: { children: React.ReactNode }): JSX.Element 
     if (color && user) localStorage.setItem(`theme_color_${user}`, color);
   }, [user]);
 
+
   useEffect(() => {
     if (user) {
       const cachedColor = localStorage.getItem(`theme_color_${user}`);
@@ -37,24 +44,23 @@ function ThemeManager({ children }: { children: React.ReactNode }): JSX.Element 
         applyTheme(cachedColor || '#ff0055', cachedBg || '');
       }
 
-      api.get('/user/theme/selection', { params: { username: user } }).then(r => {
-        const sel = r.data.selection;
+      getUserThemeSelection(user).then(data => {
+        const sel = data.selection;
         if (sel && sel !== 'Custom') {
           const colors: Record<string, string> = { Halloween: '#ff6600', Winter: '#00f2ff', Dark: '#ff0055', White: '#2563eb' };
           applyTheme(colors[sel] || '#ff0055', '');
         } else {
-          api.get(`/profile/${user}`).then(pr => {
-            if (pr.data.theme_color) applyTheme(pr.data.theme_color, pr.data.atmosphere_url);
+          getUserProfile(user).then(pr => {
+            if (pr.theme_color) applyTheme(pr.theme_color, pr.atmosphere_url || '');
           });
         }
       }).catch(() => {
-        api.get(`/profile/${user}`).then(pr => {
-          if (pr.data.theme_color) applyTheme(pr.data.theme_color, pr.data.atmosphere_url);
+        getUserProfile(user).then(pr => {
+          if (pr.theme_color) applyTheme(pr.theme_color, pr.atmosphere_url || '');
         });
       });
     } else {
-      document.documentElement.style.setProperty('--primary-color', '#ff0055');
-      document.documentElement.style.setProperty('--primary-glow', 'rgba(255, 0, 85, 0.4)');
+      applyTheme('#ff0055', '');
       document.documentElement.style.setProperty('--custom-bg', 'none');
     }
   }, [user, applyTheme]);

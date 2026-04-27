@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, Suspense } from 'react';
-import { motion } from 'framer-motion';
-import { Trophy, ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { Trophy, ChevronLeft, ChevronRight, Play, Filter, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import api from '../../api/client';
 import { Button, Card } from '../../components/UI';
@@ -18,6 +18,7 @@ function TopContent() {
   const [loading, setLoading] = useState(true);
   const [genre, setGenre] = useState('');
   const [page, setPage] = useState(1);
+  const [showGenreMenu, setShowGenreMenu] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -49,29 +50,50 @@ function TopContent() {
           <span style={{ color: 'var(--primary-color)' }}>{"//"}</span> ELITE 100
         </motion.h1>
 
-        <Card style={{ padding: '1.25rem', display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+        <Card style={{ padding: '1.25rem', display: 'flex', gap: '1.5rem', alignItems: 'center' }} hover={false}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-dim)', fontSize: '0.85rem', fontWeight: 700 }}>
             <Trophy size={18} color="var(--primary-color)" />
             GLOBAL_RANKINGS_LIVE
           </div>
           <div style={{ flex: 1 }} />
-          <select 
-            value={genre}
-            onChange={(e) => { setGenre(e.target.value); setPage(1); }}
-            style={{
-              padding: '12px 20px',
-              borderRadius: 'var(--radius-md)',
-              background: 'rgba(0,0,0,0.2)',
-              border: '1px solid var(--glass-border)',
-              color: 'white',
-              fontWeight: 800,
-              cursor: 'pointer',
-              minWidth: '200px'
-            }}
-          >
-            <option value="">ALL GENRES</option>
-            {GENRES.map(g => <option key={g.id} value={g.id}>{g.name.toUpperCase()}</option>)}
-          </select>
+          <div className="rds-select-wrapper">
+            <button 
+              className="rds-select-toggle"
+              onClick={() => setShowGenreMenu(!showGenreMenu)}
+              style={{ minWidth: '220px' }}
+            >
+              <Filter size={14} color="var(--primary-color)" />
+              {genre ? GENRES.find(g => g.id.toString() === genre)?.name : 'ALL GENRES'}
+              <ChevronDown size={14} style={{ marginLeft: 'auto', transform: showGenreMenu ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+            </button>
+
+            <AnimatePresence>
+              {showGenreMenu && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="rds-select-menu"
+                >
+                  <button 
+                    className={`rds-select-item ${genre === '' ? 'rds-select-item-active' : ''}`}
+                    onClick={() => { setGenre(''); setPage(1); setShowGenreMenu(false); }}
+                  >
+                    ALL GENRES
+                  </button>
+                  {GENRES.map(g => (
+                    <button 
+                      key={g.id} 
+                      className={`rds-select-item ${genre === g.id.toString() ? 'rds-select-item-active' : ''}`}
+                      onClick={() => { setGenre(g.id.toString()); setPage(1); setShowGenreMenu(false); }}
+                    >
+                      {g.name.toUpperCase()}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </Card>
       </header>
 

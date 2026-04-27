@@ -3,11 +3,13 @@
 :root {
   /* --- DESIGN TOKENS --- */
   
-  /* Brand Colors — Premium Slate DNA */
+  /* Brand Colors — Dynamic RDS DNA */
   --primary-color: #3db4f2;
-  --primary-glow: rgba(61, 180, 242, 0.4);
-  --accent-cyan: #00f2ff;
-  --accent-cyan-glow: rgba(0, 242, 255, 0.4);
+  --primary-hsl: 210 90% 60%; /* Fallback */
+  --primary-glow: var(--primary-hsl);
+  
+  --accent-cyan: var(--primary-color);
+  --accent-cyan-glow: hsla(var(--primary-hsl), 0.4);
   
   /* Semantic Colors */
   --success: #67c23a;
@@ -80,6 +82,77 @@
 
   /* Dynamic Injection (Reserved) */
   --custom-bg: none;
+
+  /* ============================================================
+     RONINHUB RDS — SEASONAL INTELLIGENCE TOKEN BLOCK
+     These values are LOCKED to match the approved HUD preview.
+     DO NOT modify without updating the preview reference.
+     ============================================================ */
+
+  /* Root backgrounds */
+  --hud-root-bg:          hsla(240, 22%, 6%, 1);     /* #0c0b14 */
+  --hud-topbar-bg:        hsla(240, 22%, 10%, 1);    /* #12111e */
+  --hud-thumb-bg:         hsla(240, 22%, 13%, 1);    /* #1a1830 */
+
+  /* Glass surface */
+  --glass-surface:        hsla(240, 20%, 8%, 0.75);
+
+  /* Primary accent — HSL triple (used in hsl() and hsl(var() / alpha)) */
+  --primary-hsl:          240 70% 65%;             /* Default Blue/Purple */
+  --primary-glow:         var(--primary-hsl);
+
+  /* Glow opacity levels */
+  --glow-full:            hsl(var(--primary-hsl));
+  --glow-border:          hsl(var(--primary-hsl) / 0.35);
+  --glow-border-hover:    hsl(var(--primary-hsl) / 0.55);
+  --glow-active-bg:       hsl(var(--primary-hsl) / 0.12);
+  --glow-chip-bg:         hsl(var(--primary-hsl) / 0.08);
+  --glow-hatch:           hsl(var(--primary-hsl) / 0.06);
+  --glow-grid-gap:        hsl(var(--primary-hsl) / 0.08);
+
+  /* Data Packet card */
+  --packet-bg:            hsla(240, 18%, 7%, 1);     /* #0c0b14 */
+  --packet-bg-hover:      hsla(240, 18%, 11%, 1);    /* #12111e */
+  --packet-thumb-bg:      hsla(240, 22%, 13%, 1);    /* #1a1830 */
+  --packet-thumb-border:  hsl(var(--primary-glow) / 0.12);
+  --packet-score-bg:      hsla(240, 22%, 6%, 0.85);
+  --packet-score-border:  hsl(var(--primary-glow) / 0.45);
+  --packet-airing-bg:     hsla(240, 22%, 6%, 0.8);
+
+  /* Spec label colors */
+  --spec-key-color:       hsl(var(--primary-glow) / 0.35); /* dim purple */
+  --spec-val-color:       hsl(var(--primary-glow));         /* #7F77DD */
+  --spec-title-color:     hsl(var(--primary-glow) / 0.85); /* #AFA9EC approx */
+
+  /* Scan-line animation */
+  --scan-line-color:      hsl(var(--primary-glow) / 0.8);
+
+  /* Sector / ChronosSlider */
+  --sector-border:        1px solid hsl(var(--primary-glow) / 0.35);
+  --sector-active-bg:     hsl(var(--primary-glow) / 0.12);
+  --sector-active-border: hsl(var(--primary-glow) / 0.45);
+  --sector-indicator:     hsl(var(--primary-glow));  /* bottom 1px line */
+  --sector-label-active:  hsl(var(--primary-glow) / 0.85);
+  --sector-label-inactive:hsl(var(--primary-glow) / 0.25);
+  --sector-year-active:   hsl(var(--primary-glow));
+  --sector-year-inactive: hsl(var(--primary-glow) / 0.2);
+
+  /* Filter chips */
+  --chip-color:           hsl(var(--primary-glow) / 0.35);
+  --chip-active-color:    hsl(var(--primary-glow) / 0.85);
+  --chip-active-bg:       hsl(var(--primary-glow) / 0.08);
+  --chip-active-border:   hsl(var(--primary-glow) / 0.5);
+  --chip-border:          hsl(var(--primary-glow) / 0.18);
+  --chip-category-color:  hsl(var(--primary-glow) / 0.25);
+
+  /* Progress bar */
+  --progress-track:       hsl(var(--primary-glow) / 0.15);
+  --progress-fill:        hsl(var(--primary-glow) / 0.6);
+
+  /* HUD footer */
+  --hud-footer-border:    hsl(var(--primary-glow) / 0.12);
+  --hud-footer-left:      hsl(var(--primary-glow) / 0.25);
+  --hud-footer-right:     hsl(var(--primary-glow) / 0.5);
 }
 
 /* Reset & Base */
@@ -101,8 +174,8 @@ body {
   line-height: 1.6;
   
   background-image: 
-    radial-gradient(circle at 0% 0%, rgba(255, 0, 85, 0.03) 0%, transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(0, 242, 255, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 0% 0%, hsla(var(--primary-hsl), 0.05) 0%, transparent 40%),
+    radial-gradient(circle at 100% 100%, hsla(var(--primary-hsl), 0.05) 0%, transparent 40%),
     linear-gradient(rgba(5, 5, 8, 0.85), rgba(5, 5, 8, 0.95)),
     var(--custom-bg);
   background-size: cover;
@@ -188,15 +261,105 @@ body::before {
 .rds-glow-active {
   box-shadow: 0 0 var(--glow-spread) calc(var(--glow-intensity) * 1px) var(--primary-color) !important;
   border-color: var(--primary-color) !important;
-  animation: ronin-glow 2s infinite alternate ease-in-out;
-}
-
-@keyframes ronin-glow {
-  0% { filter: drop-shadow(0 0 5px var(--primary-glow)); }
-  100% { filter: drop-shadow(0 0 15px var(--primary-glow)); }
 }
 
 @keyframes hud-scan {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+/* Broken Image Fix — RDS Protocol */
+img {
+  color: transparent;
+  text-indent: -10000px;
+}
+
+.rds-hatch {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 10px,
+    hsla(var(--primary-hsl), 0.05) 10px,
+    hsla(var(--primary-hsl), 0.05) 20px
+  );
+}
+
+/* --- RDS Custom Select Protocol --- */
+.rds-select-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rds-select-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background: var(--bg-deep);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  color: var(--text-main);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-black);
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  text-transform: uppercase;
+  min-width: 160px;
+}
+
+.rds-select-toggle:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 15px var(--primary-glow);
+  background: var(--glass-shine);
+}
+
+.rds-select-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-2);
+  background: rgba(5, 5, 8, 0.98);
+  backdrop-filter: blur(25px);
+  border: 1px solid var(--glass-border-bright);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  width: 220px;
+  z-index: 1000;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8);
+}
+
+.rds-select-item {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: var(--font-weight-black);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  border: 1px solid transparent;
+  background: transparent;
+  margin-bottom: 2px;
+  text-align: left;
+}
+
+.rds-select-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  border-color: var(--glass-border);
+  padding-left: var(--space-5);
+}
+
+.rds-select-item-active {
+  background: var(--primary-color) !important;
+  color: var(--bg-deep) !important;
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 10px var(--primary-glow);
 }

@@ -166,6 +166,172 @@ def fetch_anilist_schedule(day_name):
         print(f"[AniList schedule ERROR]: {e}")
         return []
 
+def fetch_anilist_media(media_id, is_mal=True):
+    url = 'https://graphql.anilist.co'
+    id_field = "idMal" if is_mal else "id"
+    query = f"""
+    query ($id: Int) {{
+      Media ({id_field}: $id, type: ANIME) {{
+        id
+        idMal
+        title {{
+          english
+          romaji
+          native
+        }}
+        description
+        coverImage {{
+          extraLarge
+        }}
+        bannerImage
+        format
+        status
+        episodes
+        season
+        seasonYear
+        averageScore
+        popularity
+        rankings {{
+          rank
+          type
+          allTime
+        }}
+        studios(isMain: true) {{
+          nodes {{
+            name
+          }}
+        }}
+        genres
+        source
+        duration
+        trailer {{
+          id
+          site
+        }}
+        nextAiringEpisode {{
+          airingAt
+          timeUntilAiring
+          episode
+        }}
+        externalLinks {{
+          site
+          url
+          type
+          icon
+          color
+        }}
+        characters(sort: [ROLE, RELEVANCE], perPage: 12) {{
+          edges {{
+            role
+            node {{
+              id
+              name {{
+                full
+              }}
+              image {{
+                large
+              }}
+            }}
+            voiceActors(language: JAPANESE) {{
+              id
+              name {{
+                full
+              }}
+              image {{
+                large
+              }}
+            }}
+          }}
+        }}
+        relations {{
+          edges {{
+            relationType
+            node {{
+              id
+              idMal
+              title {{
+                english
+                romaji
+              }}
+              type
+            }}
+          }}
+        }}
+      }}
+    }}
+    """
+    try:
+        response = requests.post(url, json={'query': query, 'variables': {'id': int(media_id)}}, timeout=15)
+        response.raise_for_status()
+        item = response.json().get('data', {}).get('Media')
+        if not item: return None
+
+        title = item['title']['english'] or item['title']['romaji']
+        desc = item['description']
+        if desc:
+            desc = desc.replace('<br>', '').replace('<i>', '').replace('</i>', '')
+        
+        # Extract rank
+        rank = next((r['rank'] for r in item.get('rankings', []) if r['type'] == 'RATED' and r['allTime']), None)
+
+        return {
+            'mal_id': item.get('idMal') or item['id'],
+            'idMal': item.get('idMal'),
+            'idAniList': item['id'],
+            'title': title,
+            'title_english': item['title']['english'],
+            'title_japanese': item['title']['native'],
+            'synopsis': desc,
+            'images': {'jpg': {'image_url': item['coverImage']['extraLarge'], 'large_image_url': item['coverImage']['extraLarge']}},
+            'banner_image': item.get('bannerImage'),
+            'type': item['format'],
+            'status': item['status'],
+            'episodes': item['episodes'],
+            'season': item['season'],
+            'year': item['seasonYear'],
+            'score': item['averageScore'],
+            'popularity': item['popularity'],
+            'rank': rank,
+            'studios': [{'name': n['name']} for n in item['studios']['nodes']],
+            'genres': [{'name': g} for g in item['genres']],
+            'source': item['source'],
+            'duration': f"{item['duration']} min" if item['duration'] else None,
+            'next_airing': item.get('nextAiringEpisode'),
+            'external_links': item.get('externalLinks', []),
+            'characters': [
+                {
+                    'role': e['role'],
+                    'character': {
+                        'mal_id': e['node']['id'],
+                        'name': e['node']['name']['full'],
+                        'images': {'jpg': {'image_url': e['node']['image']['large']}}
+                    },
+                    'voice_actors': [
+                        {
+                            'person': {
+                                'name': va['name']['full'],
+                                'images': {'jpg': {'image_url': va['image']['large']}}
+                            },
+                            'language': 'Japanese'
+                        } for va in e.get('voiceActors', [])
+                    ]
+                } for e in item['characters']['edges']
+            ],
+            'relations': [
+                {
+                    'relation': e['relationType'],
+                    'entry': [{
+                        'mal_id': e['node']['idMal'] or e['node']['id'],
+                        'idMal': e['node']['idMal'],
+                        'title': e['node']['title']['english'] or e['node']['title']['romaji'],
+                        'type': e['node']['type'].lower()
+                    }]
+                } for e in item['relations']['edges']
+            ]
+        }
+    except Exception as e:
+        print(f"[AniList media detail ERROR]: {e}")
+        return None
 def fetch_anilist_relations(id_mal):
     cache_key = f"anilist:relations:{id_mal}"
     cached = cache.get(cache_key)
@@ -228,13 +394,18 @@ def fetch_anilist_seasonal(year: int, season: str, page: int = 1):
           id
           idMal
           title { english romaji }
-          coverImage { extraLarge }
+          coverImage { extraLarge large }
           averageScore
           episodes
           genres
           description
-          startDate { year month day }
           status
+          format
+          popularity
+          nextAiringEpisode {
+            airingAt
+            episode
+          }
         }
       }
     }
@@ -247,23 +418,20 @@ def fetch_anilist_seasonal(year: int, season: str, page: int = 1):
         page_info = data.get('data', {}).get('Page', {}).get('pageInfo', {})
         normalized = []
         for item in media_list:
-            title = item['title']['english'] if item['title']['english'] else item['title']['romaji']
-            desc = item.get('description') or 'No synopsis available.'
-            desc = desc.replace('<br>', '').replace('<i>', '').replace('</i>', '')
-            sd = item.get('startDate', {})
-            air_date = f"{sd.get('year','?')}-{str(sd.get('month','?')).zfill(2)}-{str(sd.get('day','?')).zfill(2)}" if sd else '?'
             normalized.append({
-                'mal_id': item.get('idMal') or item['id'],
+                'id': item['id'],
                 'idMal': item.get('idMal'),
-                'idAniList': item['id'],
-                'title': title,
-                'images': {'jpg': {'image_url': item['coverImage']['extraLarge'], 'large_image_url': item['coverImage']['extraLarge']}},
-                'score': (item['averageScore'] / 10) if item['averageScore'] else 0,
+                'title': item['title'],
+                'coverImage': {
+                    'large': item['coverImage']['extraLarge'] or item['coverImage']['large']
+                },
+                'averageScore': item['averageScore'],
                 'episodes': item['episodes'],
-                'genres': [{'name': g} for g in item['genres']],
-                'synopsis': desc,
-                'air_date': air_date,
+                'nextAiringEpisode': item.get('nextAiringEpisode'),
+                'genres': item['genres'],
                 'status': item.get('status', ''),
+                'format': item.get('format', ''),
+                'popularity': item.get('popularity', 0)
             })
         result = normalized, page_info
         cache.set(cache_key, result, ttl=21600) # 6 hours

@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import { AuthContext } from '../AuthContext';
 import api, { BACKEND_URL } from '../../api/client';
+import { getUserProfile, updateProfile, getUserThemeSelection } from '@/api/user';
 import { Button, Card, Input } from '../../components/UI';
+import { hexToHSL } from '@/utils/color';
 import styles from './settings.module.css';
 
 /* eslint-disable @next/next/no-img-element */
@@ -50,16 +52,16 @@ export default function SettingsPage(): JSX.Element {
   useEffect(() => {
     if (!user || !mounted) return;
     
-    api.get('/user/theme/selection', { params: { username: user } })
-      .then(r => setTheme(r.data.selection || 'Dark'))
+    getUserThemeSelection(user)
+      .then(data => setTheme(data.selection || 'Dark'))
       .catch(console.error);
     
-    api.get(`/profile/${user}`)
-      .then(r => {
-        setBanner(r.data.banner_url || '');
-        setAtmosphere(r.data.atmosphere_url || '');
-        setCustomColor(r.data.theme_color || '#ff0055');
-        setPfp(r.data.pfp_url || '');
+    getUserProfile(user)
+      .then(data => {
+        setBanner(data.banner_url || '');
+        setAtmosphere(data.atmosphere_url || '');
+        setCustomColor(data.theme_color || '#ff0055');
+        setPfp(data.pfp_url || '');
       })
       .catch(console.error);
   }, [user, mounted]);
@@ -69,12 +71,22 @@ export default function SettingsPage(): JSX.Element {
     const themeConfig = THEMES.find(t => t.id === newTheme);
     const activeColor = newTheme === 'Custom' ? customColor : (themeConfig?.color || '#ff0055');
     document.documentElement.style.setProperty('--primary-color', activeColor);
+    
+    // Sync RDS HSL system
+    const hsl = hexToHSL(activeColor);
+    if (hsl) {
+      document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
+    }
   };
 
   const handleCustomColorChange = (color: string) => {
     setCustomColor(color);
     if (theme === 'Custom') {
       document.documentElement.style.setProperty('--primary-color', color);
+      const hsl = hexToHSL(color);
+      if (hsl) {
+        document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
+      }
     }
   };
 
@@ -113,7 +125,7 @@ export default function SettingsPage(): JSX.Element {
       const activeColor = theme === 'Custom' ? customColor : (THEMES.find(t => t.id === theme)?.color || '#ff0055');
       
       await api.post('/user/theme/selection', { username: user, selection: theme });
-      await api.post('/profile/update', { 
+      await updateProfile({ 
         username: user, 
         banner_url: banner, 
         atmosphere_url: atmosphere,
@@ -150,12 +162,12 @@ export default function SettingsPage(): JSX.Element {
   const handleSync = async (): Promise<void> => {
     if (!user) return;
     try {
-      const r = await api.get('/user/theme/selection', { params: { username: user } });
-      setTheme(r.data.selection || 'Dark');
-      const pr = await api.get(`/profile/${user}`);
-      setBanner(pr.data.banner_url || '');
-      setAtmosphere(pr.data.atmosphere_url || '');
-      setCustomColor(pr.data.theme_color || '#ff0055');
+      const data = await getUserThemeSelection(user);
+      setTheme(data.selection || 'Dark');
+      const pr = await getUserProfile(user);
+      setBanner(pr.banner_url || '');
+      setAtmosphere(pr.atmosphere_url || '');
+      setCustomColor(pr.theme_color || '#ff0055');
       alert("NEURAL_SYNC_SUCCESS: DNA_REGENERATED");
     } catch (err) {
       console.error("Sync failed", err);

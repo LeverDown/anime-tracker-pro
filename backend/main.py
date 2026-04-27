@@ -237,6 +237,15 @@ class AnimeSave(BaseModel):
     drop_reason: Optional[str] = None
     idMal: Optional[int] = None
 
+def upscale_image_url(url: str) -> str:
+    if not url: return url
+    # Handle MyAnimeList image upscaling
+    if "cdn.myanimelist.net/images/anime/" in url:
+        if not url.endswith("l.jpg") and url.endswith(".jpg"):
+            return url.replace(".jpg", "l.jpg")
+    # Handle AniList image upscaling (already using extraLarge, but for safety)
+    return url
+
 @app.get("/api/collection")
 def get_collection(username: str, status_filter: str = "All"):
     items = db.get_user_anime(username, status_filter)
@@ -244,7 +253,8 @@ def get_collection(username: str, status_filter: str = "All"):
     result = []
     for item in items:
         result.append({
-            "username": item[0], "anime_id": item[1], "title": item[2], "image_url": item[3],
+            "username": item[0], "anime_id": item[1], "title": item[2], 
+            "image_url": upscale_image_url(item[3]),
             "status": item[4], "score": item[5], "episodes": item[6], "genres": item[7],
             "review": item[8], "progress": item[9], "seasons_json": item[10],
             "coop_friend_username": item[11] if len(item) > 11 else None,
@@ -266,7 +276,8 @@ def notify_friends(username: str, message: str, anime_id: int):
 
 @app.post("/api/collection")
 def save_collection(data: AnimeSave):
-    db.save_anime_to_db(data.username, data.anime_id, data.title, data.image_url, 
+    high_res_url = upscale_image_url(data.image_url)
+    db.save_anime_to_db(data.username, data.anime_id, data.title, high_res_url, 
                         data.status, data.score, data.episodes, data.genres,
                         data.coop_friend_username, data.drop_reason, data.idMal)
     db.log_activity(data.username, f'added "{data.title}" to {data.status}', data.title, data.anime_id)
@@ -284,7 +295,29 @@ class ProgressUpdate(BaseModel):
 
 @app.post("/api/collection/progress")
 def update_progress(data: ProgressUpdate):
+    # 1. Update seasons_json (legacy compatibility)
     db.update_seasons_json(data.username, data.anime_id, data.seasons_json)
+    
+    # 2. Update the primary progress column and handle status transitions
+    with db.get_db() as conn:
+        c = conn.cursor()
+        # Fetch total episodes to check for completion
+        c.execute("SELECT episodes, status FROM user_anime WHERE username=? AND anime_id=?", (data.username, data.anime_id))
+        row = c.fetchone()
+        if row:
+            total_eps = row[0] or 0
+            current_status = row[1]
+            
+            # Update progress
+            new_status = current_status
+            if data.episode_progress >= total_eps and total_eps > 0:
+                new_status = "Completed"
+            elif data.episode_progress > 0:
+                new_status = "Watching"
+                
+            c.execute("UPDATE user_anime SET progress=?, status=? WHERE username=? AND anime_id=?", 
+                      (data.episode_progress, new_status, data.username, data.anime_id))
+            conn.commit()
     
     if data.episode_progress > 0:
         db.log_watch_history(data.username, data.anime_id, data.episode_progress)
@@ -427,7 +460,7 @@ def get_backlog(username: str):
     if items:
         r_item = random.choice(items)
         roulette = {
-            "anime_id": r_item[1], "title": r_item[2], "image_url": r_item[3], "episodes": r_item[6]
+            "anime_id": r_item[1], "title": r_item[2], "image_url": r_item[3], "episodes": r_item[6], "genres": r_item[7]
         }
         
     return {
@@ -454,6 +487,45 @@ def export_collection(username: str):
             "series_name": item[8]
         })
     return export_data
+
+@app.get("/api/anime/details/{media_id}")
+def get_anime_details(media_id: int):
+    # 1. Try Jikan first (as original code relied on it)
+    try:
+        r = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/full", timeout=8)
+        if r.status_code == 200:
+            data = r.json().get('data')
+            if data:
+                # Augment Jikan data with characters/staff if they aren't in /full
+                if not data.get('characters'):
+                    c_res = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/characters", timeout=5)
+                    if c_res.status_code == 200: data['characters'] = c_res.json().get('data', [])
+                
+                # IMPORTANT: Fetch external links and airing info from AniList even if Jikan succeeds
+                # This ensures the Tactical HUD is always populated with high-quality intelligence
+                al_extra = al.fetch_anilist_media(media_id, is_mal=True)
+                if al_extra:
+                    data['external_links'] = al_extra.get('external_links', [])
+                    data['next_airing'] = al_extra.get('next_airing')
+                else:
+                    # Fallback to Jikan's own external links if AniList fails
+                    data['external_links'] = [{"site": ex['name'], "url": ex['url'], "type": "Official"} for ex in data.get('external', [])]
+                
+                return {"data": data, "source": "jikan"}
+    except Exception as e:
+        print(f"Jikan augment error: {e}")
+        pass
+
+    # 2. Fallback to AniList (handles IDs that are AniList-only or if Jikan 404s)
+    # We try both is_mal=True and False
+    al_data = al.fetch_anilist_media(media_id, is_mal=True)
+    if not al_data:
+        al_data = al.fetch_anilist_media(media_id, is_mal=False)
+    
+    if al_data:
+        return {"data": al_data, "source": "anilist"}
+    
+    raise HTTPException(status_code=404, detail="Anime not found in any uplink.")
 
 @app.get("/api/anime/summary")
 def get_episode_summary(idMal: int, episode: int):

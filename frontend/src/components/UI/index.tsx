@@ -6,7 +6,7 @@ import { motion, HTMLMotionProps } from 'framer-motion';
  * RDS_BUTTON_PROTOCOL
  * Enforces strict token synchronization and atomic boundaries.
  */
-interface ButtonProps extends Omit<HTMLMotionProps<"button">, 'children' | 'style'> {
+interface ButtonProps extends Omit<HTMLMotionProps<"button">, 'children'> {
   children?: React.ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'tactical';
   size?: 'sm' | 'md' | 'lg';
@@ -51,7 +51,7 @@ export const Button = ({
           background: 'var(--danger)',
           color: 'var(--text-main)',
           border: 'none',
-          boxShadow: '0 0 var(--space-5) rgba(239, 68, 68, 0.3)',
+          boxShadow: '0 0 var(--space-5) var(--danger)',
         };
       case 'tactical':
         return {
@@ -109,13 +109,15 @@ interface CardProps {
   hover?: boolean;
   className?: string;
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export const Card = ({ 
   children, 
   hover = true, 
   className, 
-  onClick 
+  onClick,
+  style
 }: CardProps): JSX.Element => {
   return (
     <motion.div
@@ -126,6 +128,7 @@ export const Card = ({
         borderRadius: 'var(--radius-lg)',
         padding: 'var(--space-6)',
         cursor: onClick ? 'pointer' : 'default',
+        ...style
       }}
     >
       {children}
@@ -161,7 +164,7 @@ export const Input = ({ icon, className, ...props }: InputProps): JSX.Element =>
           width: '100%',
           padding: icon ? 'var(--space-3) var(--space-3) var(--space-3) var(--space-12)' : 'var(--space-3) var(--space-4)',
           borderRadius: 'var(--radius-md)',
-          background: 'rgba(0, 0, 0, 0.2)', // Hardcoded alpha allowed for depth effects but should ideally be a token
+          background: 'var(--glass-surface)',
           border: '1px solid var(--glass-border)',
           color: 'var(--text-main)',
           fontSize: 'var(--font-size-md)',
@@ -171,3 +174,6 @@ export const Input = ({ icon, className, ...props }: InputProps): JSX.Element =>
     </div>
   );
 };
+
+export { MediaCard } from './MediaCard';
+export * from './MediaCard/MediaCard.types';

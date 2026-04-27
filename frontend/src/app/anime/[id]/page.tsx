@@ -3,6 +3,8 @@ import React, { useState, useEffect, useContext, useRef, JSX, useCallback } from
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '../../../api/client';
+import UplinkGroup from '../../../components/UI/UplinkGroup/UplinkGroup';
+import SeasonalTimeline from '../../../components/UI/SeasonalTimeline/SeasonalTimeline';
 import { AuthContext } from '../../AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -109,28 +111,22 @@ export default function AnimeDetailPage(): JSX.Element {
   const fetchDetails = useCallback(async (targetId: string): Promise<void> => {
     setLoading(true);
     try {
-      const response = await fetch(`https://api.jikan.moe/v4/anime/${targetId}/full`);
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-      
-      const mainData = await response.json();
-      if (mainData.data) {
-        const [charRes, staffRes] = await Promise.all([
-          fetch(`https://api.jikan.moe/v4/anime/${targetId}/characters`),
-          fetch(`https://api.jikan.moe/v4/anime/${targetId}/staff`)
-        ]);
-        const charData = await charRes.json();
-        const staffData = await staffRes.json();
+      const response = await api.get(`/anime/details/${targetId}`);
+      if (response.data && response.data.data) {
+        setAnime(response.data.data);
         
-        setAnime({ 
-          ...mainData.data, 
-          characters: charData.data, 
-          staff: staffData.data 
-        });
-
-        // Async fetch relations via internal API
-        api.get('/anime/relations/smart', { params: { idMal: targetId } })
-           .then(r => setSmartRelations(r.data.data || []))
-           .catch(() => setSmartRelations([]));
+        // Async fetch relations via internal API if not already in data
+        if (!response.data.data.relations || response.data.data.relations.length === 0) {
+          api.get('/anime/relations/smart', { params: { idMal: targetId } })
+             .then(r => setSmartRelations(r.data.data || []))
+             .catch(() => setSmartRelations([]));
+        } else {
+          // If relations are provided by AniList fallback, we flatten them slightly
+          const rels = response.data.data.relations.flatMap((r: any) => 
+            r.entry.map((e: any) => ({ ...e, relation: r.relation }))
+          );
+          setSmartRelations(rels);
+        }
       } else {
         setAnime(null);
       }
@@ -218,10 +214,14 @@ export default function AnimeDetailPage(): JSX.Element {
 
         <div className={styles.infoSection}>
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-            <div className={styles.badgeGroup}>
-              <span className={styles.typeBadge}>{anime.type?.toUpperCase()}</span>
-              <span className={styles.statusBadge}>{anime.status.toUpperCase()}</span>
+            <div className={styles.statsBar}>
+              <span className={styles.statusTag}>{anime.status}</span>
+              <span className={styles.scoreTag}>★ {anime.score ? (anime.score/10).toFixed(1) : 'N/A'}</span>
+              <span className={styles.typeTag}>{anime.type}</span>
             </div>
+
+            <SeasonalTimeline airing={anime.next_airing || null} status={anime.status} />
+
             <h1 className={styles.title}>
               {anime.title_english || anime.title}
             </h1>
@@ -253,9 +253,12 @@ export default function AnimeDetailPage(): JSX.Element {
 
       <div className={styles.contentGrid}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={styles.synopsisSection}>
+          <SeasonalTimeline airing={anime.next_airing || null} status={anime.status} />
+          
           <Card className="glass-panel" style={{ padding: 'var(--space-10)', marginBottom: 'var(--space-8)' }}>
             <h3 className={styles.cardHeader}>{"//"} SYNOPSIS</h3>
             <p className={styles.synopsisBody}>{anime.synopsis || 'No synopsis available.'}</p>
+            <UplinkGroup links={anime.external_links || []} />
           </Card>
 
           <Card className="glass-panel" style={{ padding: 'var(--space-10)' }}>

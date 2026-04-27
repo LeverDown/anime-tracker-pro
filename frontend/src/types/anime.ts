@@ -14,6 +14,20 @@ export interface AnimeImages {
   webp: AnimeImage;
 }
 
+export interface AiringData {
+  airingAt: number;
+  timeUntilAiring: number;
+  episode: number;
+}
+
+export interface ExternalLinkData {
+  site: string;
+  url: string;
+  type: string;
+  icon?: string | null;
+  color?: string | null;
+}
+
 export interface Anime {
   mal_id: number;
   url: string;
@@ -30,6 +44,8 @@ export interface Anime {
   scored_by: number | null;
   rank: number | null;
   popularity: number | null;
+  members: number | null;
+  duration: string | null;
   synopsis: string | null;
   season: string | null;
   year: number | null;
@@ -38,6 +54,8 @@ export interface Anime {
   characters?: Character[]; 
   staff?: Staff[];
   relations?: Relation[];
+  next_airing?: AiringData | null;
+  external_links?: ExternalLinkData[];
 }
 
 export interface Character {
@@ -91,7 +109,8 @@ export interface BacklogMeta {
     anime_id: number; 
     title: string; 
     image_url: string; 
-    episodes: number 
+    episodes: number;
+    genres?: string;
   } | null;
 }
 

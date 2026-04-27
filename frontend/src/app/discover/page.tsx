@@ -4,16 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, TrendingUp, Sparkles, 
   ChevronLeft, ChevronRight, Play, 
-  Plus, Check, Bookmark, Clock, X 
+  Plus, Check, Bookmark, Clock, X, Filter, ChevronDown
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import api from '../../api/client';
 import { AuthContext } from '../AuthContext';
-import { Button, Card, Input } from '../../components/UI';
+import { Button, MediaCard, Input, Card } from '../../components/UI';
 import styles from './discover.module.css';
 
 /* eslint-disable @next/next/no-img-element */
-/* eslint-disable react-hooks/set-state-in-effect */
 
 const GENRES = [
   { id: 1, name: 'Action' }, { id: 2, name: 'Adventure' }, { id: 4, name: 'Comedy' },
@@ -40,11 +39,12 @@ interface AnimeResult {
   };
   type?: string;
   score?: number;
+  synopsis?: string;
 }
 
 /**
- * DiscoverContent Protocol — v2.0 (Quick Management)
- * Implements tactical library injection directly from the discovery grid.
+ * DiscoverContent Protocol — v2.1 (Polymorphic MediaCard Integration)
+ * Standardizes the discovery sector with the platform-wide MediaCard architecture.
  */
 function DiscoverContent(): JSX.Element {
   const auth = useContext(AuthContext);
@@ -60,6 +60,7 @@ function DiscoverContent(): JSX.Element {
   const [genre, setGenre] = useState<string>('');
   const [page, setPage] = useState<number>(1);
   const [activeQuickId, setActiveQuickId] = useState<number | null>(null);
+  const [showGenreMenu, setShowGenreMenu] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
@@ -136,42 +137,78 @@ function DiscoverContent(): JSX.Element {
           <span className={styles.titlePrefix}>{"//"}</span> DISCOVER
         </motion.h1>
 
-        <Card className={styles.searchBar}>
-          <div className={styles.searchInputWrapper}>
-            <Input 
-              icon={<Search size={18} />}
-              placeholder="Search the neural network..."
-              value={query}
-              onChange={e => { setQuery(e.target.value); setMode('search'); setPage(1); }}
-            />
+        <Card className={styles.searchHub} hover={false}>
+          <div className={styles.searchHubHeader}>
+            <h2 className={styles.searchHubTitle}>Search Anime</h2>
+            <div className={styles.searchHubDivider} />
           </div>
 
-          <div className={styles.buttonGroup}>
-            <Button 
-              variant={mode === 'top' ? 'primary' : 'secondary'}
-              onClick={() => { setMode('top'); setQuery(''); setPage(1); }}
-              icon={<TrendingUp size={16} />}
-            >
-              TRENDING
-            </Button>
-            {user && (
+          <div className={styles.searchHubContent}>
+            <div className={styles.searchInputWrapper}>
+              <Input 
+                icon={<Search size={18} />}
+                placeholder="Search the neural network..."
+                value={query}
+                onChange={e => { setQuery(e.target.value); setMode('search'); setPage(1); }}
+              />
+            </div>
+
+            <div className={styles.hubActions}>
               <Button 
-                variant={mode === 'foryou' ? 'primary' : 'secondary'}
-                onClick={() => { setMode('foryou'); setQuery(''); setPage(1); }}
-                icon={<Sparkles size={16} />}
+                variant={mode === 'top' ? 'primary' : 'secondary'}
+                onClick={() => { setMode('top'); setQuery(''); setPage(1); }}
+                icon={<TrendingUp size={16} />}
               >
-                FOR YOU
+                TRENDING
               </Button>
-            )}
-            
-            <select 
-              value={genre}
-              onChange={(e) => { setGenre(e.target.value); setPage(1); }}
-              className={styles.genreSelect}
-            >
-              <option value="">ALL GENRES</option>
-              {GENRES.map(g => <option key={g.id} value={g.id.toString()}>{g.name.toUpperCase()}</option>)}
-            </select>
+              {user && (
+                <Button 
+                  variant={mode === 'foryou' ? 'primary' : 'secondary'}
+                  onClick={() => { setMode('foryou'); setQuery(''); setPage(1); }}
+                  icon={<Sparkles size={16} />}
+                >
+                  FOR YOU
+                </Button>
+              )}
+              
+              <div className="rds-select-wrapper">
+                <button 
+                  className="rds-select-toggle"
+                  onClick={() => setShowGenreMenu(!showGenreMenu)}
+                >
+                  <Filter size={14} color="var(--primary-color)" />
+                  {genre ? GENRES.find(g => g.id.toString() === genre)?.name : 'ALL GENRES'}
+                  <ChevronDown size={14} style={{ marginLeft: 'auto', transform: showGenreMenu ? 'rotate(180deg)' : 'none', transition: '0.2s' }} />
+                </button>
+
+                <AnimatePresence>
+                  {showGenreMenu && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="rds-select-menu"
+                    >
+                      <button 
+                        className={`rds-select-item ${genre === '' ? 'rds-select-item-active' : ''}`}
+                        onClick={() => { setGenre(''); setPage(1); setShowGenreMenu(false); }}
+                      >
+                        ALL GENRES
+                      </button>
+                      {GENRES.map(g => (
+                        <button 
+                          key={g.id} 
+                          className={`rds-select-item ${genre === g.id.toString() ? 'rds-select-item-active' : ''}`}
+                          onClick={() => { setGenre(g.id.toString()); setPage(1); setShowGenreMenu(false); }}
+                        >
+                          {g.name.toUpperCase()}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         </Card>
       </header>
@@ -188,66 +225,49 @@ function DiscoverContent(): JSX.Element {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
+              className={styles.cardWrapper}
             >
-              <Card 
-                className={styles.animeCard}
+              <MediaCard
+                layout="vertical"
+                title={anime.title}
+                imageUrl={anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url}
+                score={anime.score ? Math.round(anime.score * 10) : undefined}
+                synopsis={anime.synopsis}
                 onClick={() => router.push(`/anime/${anime.mal_id}`)}
               >
-                <div className={styles.imageWrapper}>
-                  {/* Quick Action Trigger */}
-                  <div className={styles.quickAction} onClick={e => e.stopPropagation()}>
-                    <button 
-                      className={styles.quickActionBtn}
-                      onClick={() => setActiveQuickId(activeQuickId === anime.mal_id ? null : anime.mal_id)}
-                    >
-                      {activeQuickId === anime.mal_id ? <X size={14} /> : <Plus size={14} />}
-                    </button>
-                    
-                    <AnimatePresence>
-                      {activeQuickId === anime.mal_id && (
-                        <motion.div 
-                          initial={{ opacity: 0, scale: 0.9, y: 5 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9, y: 5 }}
-                          className={styles.quickDropdown}
-                        >
-                          {QUICK_STATUS.map(status => (
-                            <button 
-                              key={status.id}
-                              className={styles.dropdownItem}
-                              onClick={() => handleQuickSave(anime, status.id)}
-                            >
-                              {status.label}
-                              <div className={styles.dropdownItemIcon} style={{ background: status.color, boxShadow: `0 0 8px ${status.color}` }} />
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <img 
-                    src={anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url} 
-                    alt={anime.title}
-                    className={styles.animeImage}
-                  />
-                  <div className={styles.infoOverlay}>
-                    <h3 className={styles.animeTitle}>{anime.title}</h3>
-                    <div className={styles.badgeGroup}>
-                      <span className={styles.typeBadge}>
-                        {anime.type || 'TV'}
-                      </span>
-                      <span className={styles.scoreBadge}>
-                        ★ {anime.score || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
+                {/* Tactical Quick Action Overlay */}
+                <div className={`${styles.quickAction} ${activeQuickId === anime.mal_id ? styles.quickActionVisible : ''}`} onClick={e => e.stopPropagation()}>
+                  <button 
+                    className={styles.quickActionBtn}
+                    onClick={() => setActiveQuickId(activeQuickId === anime.mal_id ? null : anime.mal_id)}
+                  >
+                    {activeQuickId === anime.mal_id ? <X size={14} /> : <Plus size={14} />}
+                  </button>
                   
-                  <div className={styles.playOverlay}>
-                    <Play fill="white" size={24} />
-                  </div>
+                  <AnimatePresence>
+                    {activeQuickId === anime.mal_id && (
+                      <motion.div 
+                        initial={{ x: -160, opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: -160, opacity: 0 }}
+                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                        className={styles.quickDropdown}
+                      >
+                        {QUICK_STATUS.map(status => (
+                          <button 
+                            key={status.id}
+                            className={styles.dropdownItem}
+                            onClick={() => handleQuickSave(anime, status.id)}
+                          >
+                            <span>{status.label}</span>
+                            <div className={styles.dropdownItemIcon} style={{ background: status.color, boxShadow: `0 0 8px ${status.color}` }} />
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
-              </Card>
+              </MediaCard>
             </motion.div>
           ))
         )}

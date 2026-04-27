@@ -1,0 +1,221 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChronosSlider } from '@/components/UI/TemporalSector/ChronosSlider';
+import { DataPacket } from '@/components/UI/DataPacket/DataPacket';
+import { FilterBar, useSeasonalFilters } from '@/components/UI/FilterBar/FilterBar';
+import { SeasonalAnimeEntry, Season } from '@/types/seasonal';
+import api from '@/api/client';
+import styles from './seasonal.module.css';
+import { seasonalGridVariants } from '@/animations/motions';
+
+interface SeasonalClientProps {
+  initialData: SeasonalAnimeEntry[];
+  initialSeason: Season;
+  initialYear: number;
+}
+
+export const SeasonalClient: React.FC<SeasonalClientProps> = ({
+  initialData,
+  initialSeason,
+  initialYear
+}) => {
+  const [data, setData] = useState<SeasonalAnimeEntry[]>(initialData);
+  const [loading, setLoading] = useState(false);
+  const [activeSeason, setActiveSeason] = useState<Season>(initialSeason);
+  const [activeYear, setActiveYear] = useState<number>(initialYear);
+  const [direction, setDirection] = useState<1 | -1>(1);
+
+  const { genre, sortBy, viewMode } = useSeasonalFilters();
+
+  // Handle season/year changes
+  const handleTemporalChange = (s: Season, y: number) => {
+    const seasons: Season[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
+    const oldIndex = seasons.indexOf(activeSeason);
+    const newIndex = seasons.indexOf(s);
+    
+    let dir: 1 | -1 = 1;
+    if (y > activeYear) dir = 1;
+    else if (y < activeYear) dir = -1;
+    else dir = newIndex > oldIndex ? 1 : -1;
+
+    setDirection(dir);
+    setActiveSeason(s);
+    setActiveYear(y);
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get('/anime/seasonal', {
+          params: { year: activeYear, season: activeSeason }
+        });
+        setData(response.data.data || []);
+      } catch (err) {
+        console.error("Failed to fetch seasonal data", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [activeSeason, activeYear]);
+
+  // Filter and Sort logic
+  const filteredData = data.filter(item => {
+    if (genre !== 'ALL' && !item.genres.map(g => g.toUpperCase()).includes(genre)) return false;
+    return true;
+  }).sort((a, b) => {
+    if (sortBy === 'SCORE') return (b.averageScore || 0) - (a.averageScore || 0);
+    if (sortBy === 'POPULARITY') return b.popularity - a.popularity;
+    if (sortBy === 'AIRTIME') {
+      const aTime = a.nextAiringEpisode?.airingAt || Infinity;
+      const bTime = b.nextAiringEpisode?.airingAt || Infinity;
+      return aTime - bTime;
+    }
+    return 0;
+  });
+
+  return (
+    <div style={{ background: 'var(--hud-root-bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* HUD Topbar */}
+      <header style={{
+        background: 'var(--hud-topbar-bg)',
+        borderBottom: 'var(--sector-border)',
+        padding: '7px 14px',
+        fontFamily: 'var(--font-mono)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        zIndex: 10
+      }}>
+        <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: 'var(--spec-title-color)' }}>
+          RONINHUB // SEASONAL INTEL // TEMPORAL SECTOR ACTIVE
+        </div>
+        <div style={{ fontSize: '10px', color: 'var(--spec-val-color)', display: 'flex', alignItems: 'center' }}>
+          SYS: <span style={{ color: 'var(--spec-val-color)', marginLeft: '4px', fontWeight: 800 }}>NOMINAL</span>
+          <motion.div
+            animate={{ opacity: [1, 1, 0, 0, 1] }}
+            transition={{ duration: 1.5, repeat: Infinity, times: [0, 0.45, 0.5, 0.95, 1], ease: "linear" }}
+            style={{ 
+              marginLeft: '8px', 
+              width: '8px', 
+              height: '8px', 
+              borderRadius: '50%', 
+              background: 'var(--spec-val-color)',
+              boxShadow: '0 0 8px var(--spec-val-color)'
+            }}
+          />
+          <motion.span
+            animate={{ opacity: [1, 1, 0, 0] }}
+            transition={{ duration: 0.8, repeat: Infinity, times: [0, 0.5, 0.5, 1], ease: "linear" }}
+            style={{ marginLeft: '6px', width: '2px', height: '12px', background: 'currentColor' }}
+          />
+        </div>
+      </header>
+
+      <ChronosSlider 
+        activeSector={activeSeason} 
+        activeYear={activeYear} 
+        onSectorChange={handleTemporalChange}
+        direction={direction}
+      />
+
+      <FilterBar />
+
+      {/* Main Content Grid */}
+      <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="loading"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(5, 5, 8, 0.8)',
+                zIndex: 20,
+                gap: '20px'
+              }}
+            >
+              <div style={{ 
+                width: '40px', 
+                height: '40px', 
+                border: '2px solid var(--glow-full)',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} />
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--glow-full)', letterSpacing: '0.2em' }}>
+                FETCHING_TEMPORAL_DATA...
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key={`${activeSeason}-${activeYear}-${genre}-${sortBy}`}
+              initial="hidden"
+              animate="visible"
+              variants={seasonalGridVariants}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: viewMode === 'LIST' ? '1fr' : 'repeat(4, 1fr)',
+                gap: '1px',
+                background: 'var(--glow-grid-gap)',
+                minHeight: '100%'
+              }}
+            >
+              {filteredData.map((item, idx) => (
+                <DataPacket 
+                  key={item.id} 
+                  {...item} 
+                  index={idx}
+                  horizontal={viewMode === 'LIST'}
+                />
+              ))}
+              {filteredData.length === 0 && (
+                <div style={{ gridColumn: viewMode === 'LIST' ? '1' : 'span 4', padding: '100px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                  NO INTEL FOUND FOR THIS SECTOR.
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* HUD Footer */}
+      <footer style={{
+        padding: '6px 14px',
+        borderTop: '1px solid var(--hud-footer-border)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        background: 'var(--hud-root-bg)',
+        zIndex: 10
+      }}>
+        <div style={{
+          color: 'var(--hud-footer-left)',
+          fontSize: '9px',
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: '0.08em'
+        }}>
+          PACKETS LOADED: {filteredData.length} / {data.length} — SECTOR: {activeSeason}_{activeYear}
+        </div>
+        <div style={{
+          color: 'var(--hud-footer-right)',
+          fontSize: '9px',
+          fontFamily: 'var(--font-mono)',
+          letterSpacing: '0.08em'
+        }}>
+          AniList GQL // HYBRID CACHE ACTIVE
+        </div>
+      </footer>
+    </div>
+  );
+};

@@ -7,7 +7,8 @@ import { AuthContext } from '../../AuthContext';
 export default function PublicProfilePage() {
   const params = useParams();
   const username = params?.username as string;
-  const { user } = useContext(AuthContext);
+  const auth = useContext(AuthContext);
+  const user = auth?.user;
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState('');

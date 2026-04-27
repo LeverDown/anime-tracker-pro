@@ -1,17 +1,38 @@
 .cardContainer {
   position: relative;
-  width: 100%;
-  aspect-ratio: 2 / 3;
   background: var(--bg-card);
   overflow: hidden;
   border: 1px solid var(--glass-border);
   transition: border-color var(--transition-fast);
   cursor: pointer;
-  clip-path: var(--tactical-corner); /* Tactical RDS Geometry */
+  clip-path: var(--tactical-corner);
 }
 
-.cardContainer:hover {
-  border-color: var(--primary-color);
+.vertical {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+}
+
+.horizontal {
+  display: flex;
+  flex-direction: row;
+  height: 180px;
+  width: 100%;
+}
+
+.imageWrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.vertical .imageWrapper {
+  width: 100%;
+  height: 100%;
+}
+
+.horizontal .imageWrapper {
+  width: 130px;
+  height: 100%;
 }
 
 .poster {
@@ -22,19 +43,34 @@
 }
 
 .overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
+  flex: 1;
+  position: relative;
   width: 100%;
   height: 100%;
-  background: linear-gradient(transparent, var(--bg-deep));
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   padding: var(--space-4);
+  transition: opacity var(--transition-fast);
+}
+
+.vertical .overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  background: linear-gradient(transparent, var(--bg-deep));
   backdrop-filter: blur(2px);
   opacity: 0;
-  transition: opacity var(--transition-fast);
+}
+
+.horizontal .overlay {
+  background: transparent;
+  opacity: 1;
+  justify-content: center;
+}
+
+.cardContainer:hover {
+  border-color: var(--primary-color);
 }
 
 .cardContainer:hover .overlay {
@@ -45,12 +81,30 @@
   transform: scale(1.05);
 }
 
+.studioLabel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 4px 8px;
+  background: linear-gradient(transparent, var(--hud-root-bg));
+  font-size: 9px;
+  font-weight: var(--font-weight-black);
+  color: var(--primary-color);
+  text-transform: uppercase;
+  z-index: 5;
+}
+
 .content {
   transform: translateY(10px);
   transition: transform var(--transition-smooth);
 }
 
-.cardContainer:hover .content {
+.vertical:hover .content {
+  transform: translateY(0);
+}
+
+.horizontal .content {
   transform: translateY(0);
 }
 
@@ -116,7 +170,7 @@
   right: var(--space-3);
   width: 8px;
   height: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius-none, 0);
   z-index: 10;
 }
 

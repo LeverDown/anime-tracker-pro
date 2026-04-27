@@ -4,37 +4,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Users, Info } from 'lucide-react';
 import { MediaCardProps, InteractionStatus } from './MediaCard.types';
 import styles from './MediaCard.module.css';
+import { mediaCardVariants } from '@/animations/motions';
 
 /**
  * RONIN_MEDIA_CARD_MOTION_ENGINE
  * Replicates AniList's timing feel while maintaining RDS tactical visual distinction.
  */
-const MediaCardVariants = {
-  idle: {
-    scale: 1,
-    y: 0,
-    borderColor: 'var(--glass-border)',
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] }
-  },
-  hover: {
-    scale: 1.02,
-    y: -4,
-    borderColor: 'var(--primary-color)',
-    transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] }
-  },
-  loading: {
-    opacity: 0.8,
-    transition: { duration: 0.2 }
-  },
-  success: {
-    scale: [1, 1.05, 1],
-    transition: { duration: 0.4 }
-  },
-  error: {
-    x: [-2, 2, -2, 2, 0],
-    transition: { duration: 0.3 }
-  }
-};
 
 export const MediaCard = ({
   title,
@@ -45,28 +20,45 @@ export const MediaCard = ({
   popularity,
   studio,
   synopsis,
+  layout = 'vertical',
+  overflow = 'hidden',
+  showDefaultOverlay = true,
   onClick,
-  className
-}: MediaCardProps) => {
+  className,
+  children
+}: MediaCardProps & { 
+  children?: React.ReactNode; 
+  overflow?: 'hidden' | 'visible';
+  showDefaultOverlay?: boolean;
+}) => {
   const [currentStatus, setCurrentStatus] = useState<InteractionStatus>(initialStatus);
 
   const handleMouseEnter = () => {
-    if (currentStatus === 'idle') setCurrentStatus('hover');
+    // We only use state for non-hover interaction statuses like loading/success/error
   };
 
   const handleMouseLeave = () => {
-    if (currentStatus === 'hover') setCurrentStatus('idle');
+    // Hover is handled by whileHover
   };
+
+  const cardClasses = [
+    styles.cardContainer,
+    styles[layout],
+    currentStatus === 'hover' ? 'rds-glow-active' : '',
+    className || ''
+  ].join(' ');
 
   return (
     <motion.div
-      className={`${styles.cardContainer} ${currentStatus === 'hover' ? 'rds-glow-active' : ''} ${className || ''}`}
-      variants={MediaCardVariants}
+      className={cardClasses}
+      variants={mediaCardVariants}
       initial="idle"
-      animate={currentStatus}
+      animate={currentStatus === 'hover' ? 'idle' : currentStatus}
+      whileHover="hover"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
+      style={{ overflow }}
     >
       <AnimatePresence mode="wait">
         {currentStatus === 'loading' && (
@@ -85,31 +77,44 @@ export const MediaCard = ({
         <div className={`${styles.statusIndicator} ${styles[`status${currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}`]}`} />
       )}
 
-      <img src={imageUrl} alt={title} className={styles.poster} />
-
-      <div className={styles.overlay}>
-        <div className={styles.content}>
-          {studio && <div className={styles.studio}>{studio}</div>}
-          <h3 className={styles.title}>{title}</h3>
-          
-          <div className={styles.meta}>
-            {score !== undefined && (
-              <div className={styles.stat}>
-                <Star size={12} color="var(--warning)" fill="var(--warning)" />
-                <span>{score}%</span>
-              </div>
-            )}
-            {popularity !== undefined && (
-              <div className={styles.stat}>
-                <Users size={12} color="var(--primary-color)" />
-                <span>#{popularity}</span>
-              </div>
-            )}
-          </div>
-
-          {synopsis && <p className={styles.synopsis}>{synopsis}</p>}
-        </div>
+      <div className={styles.imageWrapper}>
+        <img 
+          src={imageUrl || 'https://via.placeholder.com/400x600?text=NO_IMAGE'} 
+          alt={title} 
+          className={styles.poster}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/400x600?text=UPLINK_FAILURE';
+          }}
+        />
+        {layout === 'horizontal' && studio && <div className={styles.studioLabel}>{studio}</div>}
       </div>
+
+      {showDefaultOverlay && (
+        <div className={styles.overlay}>
+          <div className={styles.content}>
+            {layout === 'vertical' && studio && <div className={styles.studio}>{studio}</div>}
+            <h3 className={styles.title}>{title}</h3>
+            
+            <div className={styles.meta}>
+              {score !== undefined && (
+                <div className={styles.stat}>
+                  <Star size={12} color="var(--warning)" fill="var(--warning)" />
+                  <span>{score}%</span>
+                </div>
+              )}
+              {popularity !== undefined && (
+                <div className={styles.stat}>
+                  <Users size={12} color="var(--primary-color)" />
+                  <span>#{popularity}</span>
+                </div>
+              )}
+            </div>
+
+            {synopsis && <p className={styles.synopsis}>{synopsis}</p>}
+          </div>
+        </div>
+      )}
+      {children}
     </motion.div>
   );
 };

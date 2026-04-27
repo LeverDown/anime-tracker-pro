@@ -4,6 +4,8 @@ import { AuthContext } from '../AuthContext';
 import api from '../../api/client';
 import { Button, Card } from '../../components/UI';
 import { CollectionEntry, BacklogMeta } from '../../types/anime';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Dices } from 'lucide-react';
 import styles from './backlog.module.css';
 
 /* eslint-disable react-hooks/set-state-in-effect */
@@ -22,6 +24,7 @@ export default function BacklogPage(): JSX.Element {
   const [mounted, setMounted] = useState<boolean>(false);
   const [rouletteAnim, setRouletteAnim] = useState<boolean>(false);
   const [currentPick, setCurrentPick] = useState<BacklogMeta['roulette_pick']>(null);
+  const [showResult, setShowResult] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
@@ -50,16 +53,18 @@ export default function BacklogPage(): JSX.Element {
 
   const spinRoulette = async (): Promise<void> => {
     setRouletteAnim(true);
+    setShowResult(false);
     setTimeout(async () => {
       try {
         const res = await api.get<BacklogMeta>('/collection/backlog', { params: { username: user } });
         setCurrentPick(res.data.roulette_pick);
         setRouletteAnim(false);
+        setShowResult(true);
       } catch (error) {
         console.error("Roulette spin error", error);
         setRouletteAnim(false);
       }
-    }, 800);
+    }, 2000); // Increased time for animation
   };
 
   if (!mounted || loading) return <div className={styles.container}><p className={styles.emptyState}>LOADING_BACKLOG_DATA...</p></div>;
@@ -98,23 +103,67 @@ export default function BacklogPage(): JSX.Element {
       {/* Roulette */}
       <Card className={styles.rouletteSection}>
         <h2 className={styles.rouletteTitle}>
-          🎲 NEURAL_PICK_ALGORITHM
+          🎲 BACKLOG_ROULETTE
         </h2>
-        {currentPick ? (
-          <div className={styles.rouletteContent}>
-            <img
-              src={currentPick.image_url}
-              alt={currentPick.title}
-              className={`${styles.rouletteImage} ${rouletteAnim ? styles.rouletteSpinning : ''}`}
-            />
-            <div className={styles.rouletteInfo}>
-              <div className={styles.rouletteAnimeTitle}>{currentPick.title}</div>
-              <div className={styles.rouletteAnimeSubtitle}>{currentPick.episodes ?? '?'} EPISODES</div>
-            </div>
-          </div>
-        ) : (
-          <p className={styles.emptyState}>NO_DATA_IN_PLAN_TO_WATCH_LIST</p>
-        )}
+        <AnimatePresence mode="wait">
+          {rouletteAnim ? (
+            <motion.div 
+              key="dice-anim"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className={styles.diceContainer}
+            >
+              <div className={styles.dice}>
+                <div className={styles.face} style={{ transform: 'rotateY(0deg) translateZ(30px)' }}><Dices size={30} /></div>
+                <div className={styles.face} style={{ transform: 'rotateY(90deg) translateZ(30px)' }}><Dices size={30} /></div>
+                <div className={styles.face} style={{ transform: 'rotateY(180deg) translateZ(30px)' }}><Dices size={30} /></div>
+                <div className={styles.face} style={{ transform: 'rotateY(-90deg) translateZ(30px)' }}><Dices size={30} /></div>
+                <div className={styles.face} style={{ transform: 'rotateX(90deg) translateZ(30px)' }}><Dices size={30} /></div>
+                <div className={styles.face} style={{ transform: 'rotateX(-90deg) translateZ(30px)' }}><Dices size={30} /></div>
+              </div>
+              <p className={styles.spinningText}>CRUNCHING_METRICS...</p>
+            </motion.div>
+          ) : currentPick ? (
+            <motion.div 
+              key="result"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={styles.rouletteContent}
+            >
+              {showResult && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className={styles.congratsMessage}
+                >
+                  <span className={styles.congratsPrefix}>CONGRATULATIONS!</span>
+                  <p>YOU_HAVE_ROLLED <span className={styles.rolledTitle}>{currentPick.title}</span></p>
+                </motion.div>
+              )}
+              
+              <div className={styles.pickWrapper}>
+                <img
+                  src={currentPick.image_url}
+                  alt={currentPick.title}
+                  className={styles.rouletteImage}
+                />
+                <div className={styles.rouletteInfo}>
+                  <div className={styles.rouletteAnimeTitle}>{currentPick.title}</div>
+                  <div className={styles.rouletteAnimeSubtitle}>{currentPick.episodes ?? '?'} EPISODES</div>
+                  
+                  <div className={styles.genreTags}>
+                    {currentPick.genres?.split(',').map((g, idx) => (
+                      <span key={idx} className={styles.genreTag}>{g.trim()}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <p className={styles.emptyState}>NO_DATA_IN_PLAN_TO_WATCH_LIST</p>
+          )}
+        </AnimatePresence>
         <Button
           onClick={spinRoulette}
           disabled={rouletteAnim || backlog.length === 0}

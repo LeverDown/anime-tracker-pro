@@ -1,5 +1,4 @@
-import React from 'react';
-import { Variants } from 'framer-motion';
+import { Variants, Variant } from 'framer-motion';
 
 /**
  * RDS_MEDIA_CARD_PROTOCOL
@@ -11,6 +10,7 @@ export interface MediaCardProps {
   title: string;
   subtitle?: string;
   imageUrl: string;
+  layout?: 'horizontal' | 'vertical';
   status?: InteractionStatus;
   score?: number;
   popularity?: number;
@@ -19,6 +19,7 @@ export interface MediaCardProps {
   genres?: string[];
   onClick?: () => void;
   className?: string;
+  children?: React.ReactNode;
 }
 
 export interface MediaCardState {
@@ -29,10 +30,10 @@ export interface MediaCardState {
  * Framer Motion Variant Contracts
  */
 export interface MediaCardVariants extends Variants {
-  idle: any;
-  hover: any;
-  active: any;
-  loading: any;
-  success: any;
-  error: any;
+  idle: Variant;
+  hover: Variant;
+  active: Variant;
+  loading: Variant;
+  success: Variant;
+  error: Variant;
 }

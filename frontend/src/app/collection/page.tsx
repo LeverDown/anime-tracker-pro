@@ -5,16 +5,15 @@ import {
   PlayCircle, CheckCircle, Clock, 
   XCircle, Search, ChevronRight,
   TrendingUp, BarChart3, Filter,
-  Layers, ChevronUp, ChevronDown
+  Layers, ChevronUp, ChevronDown, Dices
 } from 'lucide-react';
 import { AuthContext } from '../AuthContext';
 import api from '../../api/client';
 import { useRouter } from 'next/navigation';
-import { Button, Card, Input } from '../../components/UI';
+import { Button, MediaCard, Input } from '../../components/UI';
 import styles from './collection.module.css';
 
 /* eslint-disable @next/next/no-img-element */
-/* eslint-disable react-hooks/set-state-in-effect */
 
 interface CollectionItem {
   anime_id: number;
@@ -26,6 +25,7 @@ interface CollectionItem {
   progress: number;
   genres: string;
   series_name?: string;
+  seasons_json?: string;
 }
 
 const STATUS_MAP = [
@@ -33,12 +33,12 @@ const STATUS_MAP = [
   { id: 'Completed', label: 'COMPLETED', icon: <CheckCircle size={16} />, color: 'var(--accent-cyan)' },
   { id: 'On Hold', label: 'ON HOLD', icon: <Clock size={16} />, color: '#fbbf24' },
   { id: 'Dropped', label: 'DROPPED', icon: <XCircle size={16} />, color: '#ef4444' },
-  { id: 'Plan to Watch', label: 'PLANNING', icon: <Clock size={16} />, color: 'var(--text-dim)' },
+  { id: 'Plan to Watch', label: 'PLAN TO WATCH', icon: <Clock size={16} />, color: 'var(--text-dim)' },
 ];
 
 /**
- * CollectionPage Protocol — v5.0 (Neural Segmented Controls)
- * Enforces high-fidelity navigation and real-time category counting.
+ * CollectionPage Protocol — v5.1 (Polymorphic MediaCard)
+ * Standardizes the archive sector with the platform-wide MediaCard architecture.
  */
 export default function CollectionPage(): JSX.Element {
   const auth = useContext(AuthContext);
@@ -68,6 +68,26 @@ export default function CollectionPage(): JSX.Element {
       .catch(() => setLoading(false));
   }, [user, mounted]);
 
+  const handleProgressUpdate = async (animeId: number, newProgress: number) => {
+    const item = collection.find(i => i.anime_id === animeId);
+    if (!item) return;
+
+    // Optimistic Update
+    setCollection(prev => prev.map(i => i.anime_id === animeId ? { ...i, progress: newProgress } : i));
+
+    try {
+      await api.post('/collection/progress', {
+        username: user,
+        anime_id: animeId,
+        episode_progress: newProgress,
+        seasons_json: item.seasons_json // Keep existing seasons_json
+      });
+    } catch (err) {
+      console.error("Failed to update progress:", err);
+      // Rollback on error? Maybe not needed for a slider.
+    }
+  };
+
   const counts = useMemo(() => {
     return STATUS_MAP.reduce((acc, tab) => {
       acc[tab.id] = collection.filter(item => item.status?.toLowerCase() === tab.id.toLowerCase()).length;
@@ -80,18 +100,59 @@ export default function CollectionPage(): JSX.Element {
       .filter(item => item.status?.toLowerCase() === activeTab?.toLowerCase())
       .filter(item => item.title.toLowerCase().includes(search.toLowerCase()));
 
+    const ALIAS_MAP: Record<string, string> = {
+      'SHINGEKI NO KYOJIN': 'ATTACK ON TANTAN', // User specifically mentioned this
+      'ATTACK ON TITAN': 'ATTACK ON TITAN',
+      'KIMETSU NO YAIBA': 'DEMON SLAYER',
+      'DEMON SLAYER': 'DEMON SLAYER',
+      'BOKU NO HERO ACADEMIA': 'MY HERO ACADEMIA',
+      'MY HERO ACADEMIA': 'MY HERO ACADEMIA',
+      'JUJUTSU KAISEN': 'JUJUTSU KAISEN',
+      'ONE PUNCH MAN': 'ONE PUNCH MAN',
+      'NANATSU NO TAIZAI': 'THE SEVEN DEADLY SINS',
+      'THE SEVEN DEADLY SINS': 'THE SEVEN DEADLY SINS',
+      'SHIGATSU WA KIMI NO USO': 'YOUR LIE IN APRIL',
+      'YOUR LIE IN APRIL': 'YOUR LIE IN APRIL',
+      'KOE NO KATACHI': 'A SILENT VOICE',
+      'A SILENT VOICE': 'A SILENT VOICE',
+      'KIMI NO NA WA.': 'YOUR NAME.',
+      'YOUR NAME.': 'YOUR NAME.',
+      'RE:ZERO KARA HAJIMERU ISEKAI SEIKATSU': 'RE:ZERO',
+      'RE:ZERO': 'RE:ZERO',
+    };
+
     return filtered.reduce((acc: Record<string, CollectionItem[]>, item) => {
       let key = item.series_name;
       if (!key) {
-        const titleParts = item.title.split(/[:\-(]|(?:\s+PART\s+)|(?:\s+SEASON\s+)|(?:\s+\d+(?:st|nd|rd|th)\s+STAGE)|(?:\s+ARC\s+)/i);
+        // Advanced splitting: handles "2nd Season", "Part 2", "Movie", etc.
+        const cleanTitle = item.title.toUpperCase()
+          .replace(/\s+SEASON\s+\d+/g, '')
+          .replace(/\s+\d+(ST|ND|RD|TH)?\s+SEASON/g, '')
+          .replace(/\s+PART\s+\d+/g, '')
+          .replace(/\s+STAGE/g, '')
+          .replace(/\s+ARC/g, '')
+          .replace(/\s+MOVIE/g, '')
+          .replace(/\s+OAD/g, '')
+          .replace(/\s+OVA/g, '')
+          .replace(/\s+SPECIALS?/g, '');
+        
+        const titleParts = cleanTitle.split(/[:\-(]/);
         key = titleParts[0].trim();
-        const upperTitle = item.title.toUpperCase();
-        if (upperTitle.includes("JOJO")) key = "JOJO'S BIZARRE ADVENTURE";
-        else if (upperTitle.includes("FATE/")) key = "FATE FRANCHISE";
-        else if (upperTitle.includes("MONOGATARI")) key = "MONOGATARI SERIES";
-        else if (upperTitle.includes("HIGH SCHOOL DXD")) key = "HIGH SCHOOL DXD";
-        else if (upperTitle.includes("SWORD ART ONLINE")) key = "SWORD ART ONLINE";
+
+        // Check for aliases
+        if (ALIAS_MAP[key]) {
+          key = ALIAS_MAP[key];
+        }
+
+        // Hardcoded group overrides
+        if (key.includes("JOJO")) key = "JOJO'S BIZARRE ADVENTURE";
+        else if (key.includes("FATE/")) key = "FATE FRANCHISE";
+        else if (key.includes("MONOGATARI")) key = "MONOGATARI SERIES";
+        else if (key.includes("HIGH SCHOOL DXD")) key = "HIGH SCHOOL DXD";
+        else if (key.includes("SWORD ART ONLINE")) key = "SWORD ART ONLINE";
+        else if (key.includes("GIRLS UND PANZER")) key = "GIRLS UND PANZER";
       }
+
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
       return acc;
@@ -116,6 +177,16 @@ export default function CollectionPage(): JSX.Element {
           </motion.h1>
           
           <div className={styles.actionGroup}>
+            {activeTab === 'Plan to Watch' && (
+              <Button 
+                variant="primary" 
+                onClick={() => router.push('/backlog')} 
+                icon={<Dices size={18} />}
+                className={styles.rouletteButton}
+              >
+                ROULETTE
+              </Button>
+            )}
             <Button variant="secondary" onClick={() => router.push('/stats')} icon={<BarChart3 size={18} />}>STATS</Button>
             <Button variant="secondary" icon={<TrendingUp size={18} />}>IMPORT</Button>
           </div>
@@ -123,11 +194,10 @@ export default function CollectionPage(): JSX.Element {
 
         <div className={styles.filterCard}>
           <div className={styles.statusList}>
-            {/* Sliding Highlight */}
             <div 
               className={styles.tabHighlight}
               style={{ 
-                width: `calc((100% - ${4 * 2}px) / 5)`, // Adjust for gaps
+                width: `calc((100% - ${4 * 2}px) / 5)`, 
                 left: `calc(${activeTabIndex} * ((100% - ${4 * 2}px) / 5) + ${activeTabIndex * 2}px)`,
                 background: STATUS_MAP[activeTabIndex]?.color,
                 boxShadow: `0 0 20px ${STATUS_MAP[activeTabIndex]?.color}44`
@@ -178,11 +248,9 @@ export default function CollectionPage(): JSX.Element {
             const latest = items[items.length - 1];
             const isExpanded = expandedStack === series;
 
-            const totalEps = items.reduce((sum, item) => sum + (item.episodes || 0), 0);
-            const totalProg = items.reduce((sum, item) => {
-              return sum + (activeTab === 'Completed' ? (item.episodes || 0) : item.progress);
-            }, 0);
-            const progressPercent = Math.min(100, (totalProg / (totalEps || 1)) * 100);
+            const totalProg = items.reduce((sum, item) => sum + (item.progress || 0), 0);
+            const totalEpsCount = items.reduce((sum, item) => sum + (item.episodes || 0), 0);
+            const progressPercent = Math.min(100, (totalProg / (totalEpsCount || 1)) * 100);
 
             return (
               <motion.div
@@ -199,18 +267,25 @@ export default function CollectionPage(): JSX.Element {
                   </>
                 )}
                 
-                <Card 
-                  className={styles.seriesCard}
+                <MediaCard
+                  layout="vertical"
+                  title={series}
+                  imageUrl={latest.image_url}
                   onClick={() => !isExpanded && router.push(`/anime/${latest.anime_id}`)}
+                  className={styles.seriesCard}
+                  overflow="visible"
+                  showDefaultOverlay={false}
                 >
-                  <img src={latest.image_url} alt="" className={styles.poster} />
-                  
-                  <div className={styles.overlay}>
-                    <h3 className={styles.seriesTitle}>{series}</h3>
-                    
+                  <div className={styles.collectionOverlay}>
+                    <div className={styles.seriesTitle}>{series}</div>
                     <div className={styles.cardMetadata}>
                       <span className={styles.progressLabel}>
-                        {activeTab === 'Completed' ? 'ARCHIVED' : `${totalProg}/${totalEps} EP`}
+                        {activeTab === 'Completed' ? 'ARCHIVED // ' : 
+                         activeTab === 'Watching' ? 'TRACKING // ' :
+                         activeTab === 'On Hold' ? 'STALLED // ' :
+                         activeTab === 'Dropped' ? 'SCRAPPED // ' :
+                         activeTab === 'Plan to Watch' ? 'PLANNED // ' : ''}
+                        {totalProg}/{totalEpsCount} EP
                       </span>
                       {items.length > 1 && (
                         <span 
@@ -223,6 +298,19 @@ export default function CollectionPage(): JSX.Element {
                         </span>
                       )}
                     </div>
+
+                    {activeTab !== 'Plan to Watch' && items.length === 1 && (
+                      <div className={styles.sliderContainer} onClick={(e) => e.stopPropagation()}>
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max={latest.episodes || 12} 
+                          value={latest.progress}
+                          onChange={(e) => handleProgressUpdate(latest.anime_id, parseInt(e.target.value))}
+                          className={styles.episodeSlider}
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <AnimatePresence>
@@ -234,6 +322,15 @@ export default function CollectionPage(): JSX.Element {
                         className={styles.stackDropdown}
                         onClick={(e) => e.stopPropagation()}
                       >
+                        <div className={styles.dropdownHeader}>
+                          <span className={styles.dropdownTitle}>SELECT SECTOR // ARCHIVE</span>
+                          <button 
+                            className={styles.closeDropdown}
+                            onClick={() => setExpandedStack(null)}
+                          >
+                            <XCircle size={14} />
+                          </button>
+                        </div>
                         {items.map((item) => (
                           <div 
                             key={item.anime_id}
@@ -259,7 +356,7 @@ export default function CollectionPage(): JSX.Element {
                       }} 
                     />
                   </div>
-                </Card>
+                </MediaCard>
               </motion.div>
             );
           })}
