@@ -120,9 +120,9 @@
   --packet-airing-bg:     hsla(240, 22%, 6%, 0.8);
 
   /* Spec label colors */
-  --spec-key-color:       hsl(var(--primary-glow) / 0.35); /* dim purple */
+  --spec-key-color:       hsl(var(--primary-glow) / 0.75); /* High-vis purple */
   --spec-val-color:       hsl(var(--primary-glow));         /* #7F77DD */
-  --spec-title-color:     hsl(var(--primary-glow) / 0.85); /* #AFA9EC approx */
+  --spec-title-color:     hsl(var(--primary-glow) / 1.0);  /* Solid */
 
   /* Scan-line animation */
   --scan-line-color:      hsl(var(--primary-glow) / 0.8);
@@ -132,18 +132,18 @@
   --sector-active-bg:     hsl(var(--primary-glow) / 0.12);
   --sector-active-border: hsl(var(--primary-glow) / 0.45);
   --sector-indicator:     hsl(var(--primary-glow));  /* bottom 1px line */
-  --sector-label-active:  hsl(var(--primary-glow) / 0.85);
-  --sector-label-inactive:hsl(var(--primary-glow) / 0.25);
+  --sector-label-active:  hsl(var(--primary-glow) / 1.0);
+  --sector-label-inactive:hsl(var(--primary-glow) / 0.65);
   --sector-year-active:   hsl(var(--primary-glow));
-  --sector-year-inactive: hsl(var(--primary-glow) / 0.2);
+  --sector-year-inactive: hsl(var(--primary-glow) / 0.55);
 
   /* Filter chips */
-  --chip-color:           hsl(var(--primary-glow) / 0.35);
-  --chip-active-color:    hsl(var(--primary-glow) / 0.85);
-  --chip-active-bg:       hsl(var(--primary-glow) / 0.08);
-  --chip-active-border:   hsl(var(--primary-glow) / 0.5);
-  --chip-border:          hsl(var(--primary-glow) / 0.18);
-  --chip-category-color:  hsl(var(--primary-glow) / 0.25);
+  --chip-color:           hsl(var(--primary-glow) / 0.65);
+  --chip-active-color:    hsl(var(--primary-glow) / 1.0);
+  --chip-active-bg:       hsl(var(--primary-glow) / 0.12);
+  --chip-active-border:   hsl(var(--primary-glow) / 0.7);
+  --chip-border:          hsl(var(--primary-glow) / 0.35);
+  --chip-category-color:  hsl(var(--primary-glow) / 0.75);
 
   /* Progress bar */
   --progress-track:       hsl(var(--primary-glow) / 0.15);

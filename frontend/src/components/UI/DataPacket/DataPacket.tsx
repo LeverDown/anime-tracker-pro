@@ -10,6 +10,7 @@ interface DataPacketProps extends SeasonalAnimeEntry {
   index: number;
   horizontal?: boolean;
   onSelect?: (id: number) => void;
+  airtimeOverride?: string;
 }
 
 
@@ -24,7 +25,8 @@ export const DataPacket: React.FC<DataPacketProps> = ({
   format,
   index,
   horizontal,
-  onSelect
+  onSelect,
+  airtimeOverride
 }) => {
   const [hasError, setHasError] = React.useState(false);
   const reduced = useReducedMotion();
@@ -103,9 +105,9 @@ export const DataPacket: React.FC<DataPacketProps> = ({
           </div>
         )}
 
-        {nextAiringEpisode && (
+        {(airtimeOverride || nextAiringEpisode) && (
           <div className={styles.airtimeStrip}>
-            {formatAirtime(nextAiringEpisode.airingAt)}
+            {airtimeOverride || (nextAiringEpisode && formatAirtime(nextAiringEpisode.airingAt))}
           </div>
         )}
       </div>
