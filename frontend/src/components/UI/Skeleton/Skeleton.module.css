@@ -1,0 +1,111 @@
+/* Skeleton Card */
+.skeletonCard {
+  background: var(--bg-card);
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  position: relative;
+}
+
+.skeletonCard.horizontal {
+  display: flex;
+  height: 180px;
+}
+
+.skeletonCard.horizontal .thumb {
+  width: 130px;
+  height: 100%;
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--hud-thumb-bg);
+  position: relative;
+  overflow: hidden;
+}
+
+.shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsla(var(--primary-hsl) / 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+  z-index: 10;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.content {
+  padding: 12px;
+}
+
+.titleLine {
+  height: 12px;
+  background: var(--packet-bg-hover);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metaLine {
+  height: 10px;
+  width: 60%;
+  background: var(--packet-bg-hover);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  position: relative;
+  overflow: hidden;
+}
+
+.titleLine::after,
+.metaLine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsla(var(--primary-hsl) / 0.08) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* Skeleton Text */
+.skeletonText {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.textLine {
+  height: 12px;
+  background: var(--bg-panel);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.textLine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsla(var(--primary-hsl) / 0.06) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}

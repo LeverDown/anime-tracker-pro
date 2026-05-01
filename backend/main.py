@@ -1,28 +1,35 @@
+import os
+import sys
+import json
+import asyncio
+from datetime import datetime, timedelta
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+import sentry_sdk
+import uuid
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional, Any
-import sentry_sdk
-import uuid
-
-sentry_sdk.init(
-    dsn="https://a12ba8384ace7dcd3527a7a097d2c781@o4511279964618752.ingest.us.sentry.io/4511280177938432",
-    send_default_pii=True,
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-)
-import json
-import os
-import sys
-import asyncio
-from datetime import datetime, timedelta
 
 # Ensure the backend directory is in the path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import database as db
 import anilist as al
+
+sentry_sdk.init(
+    dsn=os.getenv("SENTRY_DSN"),
+    send_default_pii=True,
+    traces_sample_rate=1.0,
+    profiles_sample_rate=1.0,
+)
 
 app = FastAPI(title="Anime Tracker API")
 
@@ -119,9 +126,9 @@ def update_theme(data: ThemeUpdate):
 
 # --- Anime APIs ---
 @app.get("/api/anime/discover")
-def discover_anime(mode: str = "search", query: Optional[str] = None, genre: Optional[str] = None, page: int = 1):
+def discover_anime(mode: str = "search", query: Optional[str] = None, genre: Optional[str] = None, page: int = 1, perPage: int = 50):
     genres = [genre] if genre else None
-    data, page_info = al.fetch_anilist(query=query, mode=mode, genres=genres, page=page)
+    data, page_info = al.fetch_anilist(query=query, mode=mode, genres=genres, page=page, perPage=perPage)
     return {"data": data, "pageInfo": page_info}
 
 @app.get("/api/anime/schedule")
@@ -130,11 +137,12 @@ def get_schedule(day: str):
     return {"data": data}
 
 @app.get("/api/anime/recommendations")
-def get_recommendations(username: str, page: int = 1):
+def get_recommendations(username: str, genre: Optional[str] = None, page: int = 1, perPage: int = 50):
+    if genre == "": genre = None
     items = db.get_user_anime(username, "All")
     
     if not items:
-        data, page_info = al.fetch_anilist(mode="top", perPage=24, page=page)
+        data, page_info = al.fetch_anilist(mode="top", perPage=perPage, page=page, genres=[genre] if genre else None)
         return {"data": data, "pageInfo": page_info}
 
     # Signal Maps
@@ -166,10 +174,14 @@ def get_recommendations(username: str, page: int = 1):
         # For now, we'll focus on the Sequel Awareness and improved candidate scoring.
 
     # Fetch 150 candidates with relations/tags/studios
-    candidates, _ = al.fetch_anilist(mode="top", perPage=150)
+    candidates, _ = al.fetch_anilist(mode="top", perPage=150, genres=[genre] if genre else None)
     
     scored_candidates = []
     for anime in candidates:
+        # Extra safety: filter by genre if requested
+        if genre and genre not in [g['name'] for g in anime.get('genres', [])]:
+            continue
+            
         # 1. Basic filter: already in list
         if anime['mal_id'] in user_anime_ids or (anime['idMal'] and anime['idMal'] in user_anime_ids):
             continue
@@ -212,7 +224,7 @@ def get_recommendations(username: str, page: int = 1):
     scored_candidates.sort(key=lambda x: x['_match_score'], reverse=True)
     
     # Pagination
-    per_page = 24
+    per_page = perPage
     total = len(scored_candidates)
     last_page = (total // per_page) + (1 if total % per_page > 0 else 0)
     start = (page - 1) * per_page
@@ -406,11 +418,11 @@ from datetime import datetime
 
 @app.get("/api/user/stats/{username}")
 def get_user_stats(username: str):
-    # Total episodes from watch history
+    # Total episodes from current progress (More accurate for live syncing)
     with db.get_db() as conn:
         c = conn.cursor()
-        c.execute('SELECT count(*) FROM watch_history WHERE username=?', (username,))
-        total_episodes = c.fetchone()[0]
+        c.execute('SELECT SUM(progress) FROM user_anime WHERE username=?', (username,))
+        total_episodes = c.fetchone()[0] or 0
         
     # Anime list metrics
     items = db.get_user_anime(username, "All")
@@ -490,42 +502,31 @@ def export_collection(username: str):
 
 @app.get("/api/anime/details/{media_id}")
 def get_anime_details(media_id: int):
-    # 1. Try Jikan first (as original code relied on it)
-    try:
-        r = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/full", timeout=8)
-        if r.status_code == 200:
-            data = r.json().get('data')
-            if data:
-                # Augment Jikan data with characters/staff if they aren't in /full
-                if not data.get('characters'):
-                    c_res = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/characters", timeout=5)
-                    if c_res.status_code == 200: data['characters'] = c_res.json().get('data', [])
-                
-                # IMPORTANT: Fetch external links and airing info from AniList even if Jikan succeeds
-                # This ensures the Tactical HUD is always populated with high-quality intelligence
-                al_extra = al.fetch_anilist_media(media_id, is_mal=True)
-                if al_extra:
-                    data['external_links'] = al_extra.get('external_links', [])
-                    data['next_airing'] = al_extra.get('next_airing')
-                else:
-                    # Fallback to Jikan's own external links if AniList fails
-                    data['external_links'] = [{"site": ex['name'], "url": ex['url'], "type": "Official"} for ex in data.get('external', [])]
-                
-                return {"data": data, "source": "jikan"}
-    except Exception as e:
-        print(f"Jikan augment error: {e}")
-        pass
-
-    # 2. Fallback to AniList (handles IDs that are AniList-only or if Jikan 404s)
+    # 1. Try AniList first (Prioritize AniList per requirements)
     # We try both is_mal=True and False
     al_data = al.fetch_anilist_media(media_id, is_mal=True)
     if not al_data:
         al_data = al.fetch_anilist_media(media_id, is_mal=False)
     
     if al_data:
+        # Augment with Jikan for extra metadata if needed, but primary is AniList
         return {"data": al_data, "source": "anilist"}
+
+    # 2. Fallback to Jikan (MAL)
+    try:
+        r = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/full", timeout=8)
+        if r.status_code == 200:
+            data = r.json().get('data')
+            if data:
+                # Fallback to Jikan's own external links if AniList is down
+                data['external_links'] = [{"site": ex['name'], "url": ex['url'], "type": "Official"} for ex in data.get('external', [])]
+                return {"data": data, "source": "jikan"}
+    except Exception as e:
+        print(f"Jikan fallback error: {e}")
+        pass
     
-    raise HTTPException(status_code=404, detail="Anime not found in any uplink.")
+    raise HTTPException(status_code=404, detail="Anime not found in any uplink (All uplinks disabled or ID invalid).")
+
 
 @app.get("/api/anime/summary")
 def get_episode_summary(idMal: int, episode: int):
@@ -548,8 +549,8 @@ def get_seasonal(year: int, season: str, page: int = 1):
     return {"data": data, "pageInfo": page_info}
 
 @app.get("/api/anime/top")
-def get_top_anime(page: int = 1, per_page: int = 50):
-    data, page_info = al.fetch_anilist_top(page, per_page)
+def get_top_anime(page: int = 1, per_page: int = 50, genre: Optional[str] = None, year: Optional[int] = None):
+    data, page_info = al.fetch_anilist_top(page, per_page, genre, year)
     return {"data": data, "pageInfo": page_info}
 
 @app.get("/api/anime/relations/smart")

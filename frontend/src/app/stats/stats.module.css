@@ -3,13 +3,22 @@
 }
 
 .header {
-  margin-bottom: var(--space-12);
+  margin-bottom: var(--space-8);
+  border-bottom: 1px solid var(--hud-footer-border);
+  background: var(--hud-topbar-bg);
+  padding: 12px 18px;
 }
 
 .title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-black);
-  margin-bottom: var(--space-6);
+  font-size: 24px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-transform: uppercase;
 }
 
 .titlePrefix {
@@ -17,93 +26,110 @@
 }
 
 .reportCard {
-  padding: var(--space-4);
+  margin-top: 12px;
+  padding: 0;
   display: flex;
   gap: var(--space-6);
   align-items: center;
-  background: var(--glass-shine);
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .reportLabel {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
   color: var(--text-dim);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-black);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  letter-spacing: 0.2em;
 }
 
 .metricsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--space-8);
-  margin-bottom: var(--space-12);
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--hud-footer-border);
+  margin-bottom: var(--space-1);
+  border: 1px solid var(--hud-footer-border);
 }
 
 .metricCard {
-  text-align: center;
+  text-align: left;
   padding: var(--space-8);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  transition: var(--transition-medium);
+  background: var(--hud-topbar-bg);
+  border: none !important;
+  border-radius: 0 !important;
 }
 
 .metricIcon {
-  margin-bottom: var(--space-4);
-  filter: drop-shadow(0 0 10px currentColor);
+  margin-bottom: var(--space-6);
+  opacity: 0.8;
 }
 
 .metricValue {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-black);
-  color: white;
-  margin-bottom: var(--space-2);
+  font-size: 32px;
+  font-weight: 900;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  margin-bottom: 4px;
 }
 
 .metricLabel {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-black);
+  font-size: 10px;
+  font-weight: 800;
   color: var(--text-dark);
-  letter-spacing: var(--tracking-widest);
+  letter-spacing: 0.15em;
   text-transform: uppercase;
+  font-family: var(--font-mono);
 }
 
 .genreCard {
-  padding: var(--space-8);
+  padding: var(--space-10);
+  background: var(--hud-topbar-bg);
+  border: 1px solid var(--hud-footer-border);
+  border-radius: 0 !important;
 }
 
 .genreTitle {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-black);
-  margin-bottom: var(--space-8);
-  color: white;
-  letter-spacing: var(--tracking-tight);
+  font-size: 11px;
+  font-weight: 900;
+  margin-bottom: var(--space-10);
+  color: var(--primary-color);
+  font-family: var(--font-mono);
+  letter-spacing: 0.2em;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .genreList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: 1px;
+  background: var(--hud-footer-border);
 }
 
 .genreItem {
   width: 100%;
+  padding: 16px;
+  background: var(--bg-deep);
 }
 
 .genreInfo {
   display: flex;
   justify-content: space-between;
-  margin-bottom: var(--space-3);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-black);
+  margin-bottom: 12px;
+  font-size: 11px;
+  font-weight: 900;
+  font-family: var(--font-mono);
 }
 
 .genreName {
   color: var(--text-main);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 .genreCount {
@@ -112,29 +138,41 @@
 
 .barTrack {
   width: 100%;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-full);
-  overflow: hidden;
+  height: 4px;
+  background: var(--hud-footer-border);
 }
 
 .barFill {
   height: 100%;
   background: var(--primary-color);
   box-shadow: 0 0 15px var(--primary-glow);
-  border-radius: var(--radius-full);
+}
+
+.emptyState {
+  padding: 100px;
+  text-align: center;
+  border: 1px dashed var(--hud-footer-border);
+}
+
+.emptyText {
+  color: var(--text-dim);
+  font-weight: 900;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
 }
 
 .skeletonCard {
   height: 160px;
-  background: var(--bg-panel);
-  opacity: 0.2;
-  border-radius: var(--radius-lg);
+  background: var(--hud-topbar-bg);
+  opacity: 0.3;
+  border-radius: 0;
   animation: pulse 2s infinite;
+  border: 1px solid var(--hud-footer-border);
 }
 
 @keyframes pulse {
-  0% { opacity: 0.1; }
-  50% { opacity: 0.3; }
-  100% { opacity: 0.1; }
+  0% { opacity: 0.2; }
+  50% { opacity: 0.4; }
+  100% { opacity: 0.2; }
 }

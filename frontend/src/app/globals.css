@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&family=Roboto+Mono:wght@400;700&display=swap');
 
 :root {
   /* --- DESIGN TOKENS --- */
@@ -28,6 +28,10 @@
   --text-dim: #9fadbd;
   --text-dark: #748899;
   
+  /* Typography System */
+  --font-main: 'Inter', sans-serif;
+  --font-mono: 'Roboto Mono', 'Space Mono', monospace;
+  
   /* Glassmorphism DNA */
   --glass-bg: rgba(21, 31, 46, 0.7);
   --glass-border: rgba(255, 255, 255, 0.08);
@@ -37,9 +41,9 @@
   
   /* Layout & Spacing */
   --sidebar-width: 280px;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 24px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
   --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   
@@ -180,7 +184,7 @@ body {
     var(--custom-bg);
   background-size: cover;
   background-position: center;
-  background-attachment: fixed;
+  background-attachment: var(--parallax-attachment, fixed);
 }
 
 /* Standard Glass Panel */
@@ -251,7 +255,7 @@ body::before {
   z-index: 9999;
   background-size: 100% 4px, 3px 100%;
   pointer-events: none;
-  opacity: 0.1;
+  opacity: var(--scan-line-opacity, 0.1);
   /* RDS Interaction Tokens */
   --glow-intensity: 0.4;
   --glow-spread: 20px;
@@ -261,6 +265,31 @@ body::before {
 .rds-glow-active {
   box-shadow: 0 0 var(--glow-spread) calc(var(--glow-intensity) * 1px) var(--primary-color) !important;
   border-color: var(--primary-color) !important;
+}
+
+.rds-scan-lines {
+  position: relative;
+  overflow: hidden;
+}
+
+.rds-scan-lines::after {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%), 
+              linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+  z-index: 5;
+  background-size: 100% 3px, 3px 100%;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.rds-grid {
+  background-image: 
+    linear-gradient(hsl(var(--primary-hsl) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary-hsl) / 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
 }
 
 @keyframes hud-scan {
@@ -295,30 +324,38 @@ img {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-6);
-  background: var(--bg-deep);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  color: var(--text-main);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-black);
-  letter-spacing: 1px;
+  padding: 6px 16px;
+  background: transparent;
+  border: 1px solid var(--chip-border);
+  border-radius: 0;
+  color: var(--chip-color);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 950;
   cursor: pointer;
   transition: var(--transition-fast);
   text-transform: uppercase;
-  min-width: 160px;
+  min-width: 180px;
 }
 
 .rds-select-toggle:hover {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 15px var(--primary-glow);
-  background: var(--glass-shine);
+  border-color: var(--chip-active-border);
+  color: var(--chip-active-color);
+  background: var(--glow-active-bg);
+}
+
+.rds-select-toggle-active {
+  background: var(--glow-active-bg) !important;
+  border-color: var(--primary-color) !important;
+  color: var(--primary-color) !important;
+  box-shadow: 0 0 15px var(--glow-border);
 }
 
 .rds-select-menu {
   position: absolute;
   top: 100%;
-  right: 0;
+  left: 0;
+  right: auto;
   margin-top: var(--space-2);
   background: rgba(5, 5, 8, 0.98);
   backdrop-filter: blur(25px);
@@ -363,3 +400,95 @@ img {
   border-color: var(--primary-color) !important;
   box-shadow: 0 0 10px var(--primary-glow);
 }
+
+/* === ENHANCED ANIMATIONS === */
+
+/* Scan-line sweep for DataPacket hover */
+@keyframes scanSweep {
+  0% { left: -50%; }
+  100% { left: 150%; }
+}
+
+/* Shimmer effect for skeleton components */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Smooth spin for loading indicators */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Glow pulse for interactive elements */
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 5px var(--primary-glow); }
+  50% { box-shadow: 0 0 20px var(--primary-glow), 0 0 40px var(--primary-glow); }
+}
+
+/* Page transition overlay */
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Stagger fade-in helper */
+.stagger-fade > * {
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.stagger-fade > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-fade > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-fade > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-fade > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-fade > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-fade > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger-fade > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger-fade > *:nth-child(8) { animation-delay: 0.4s; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   RONINHUB — SETTINGS SECTOR TOKENS (S-BLOCK)
+   ============================================================ */
+.settings-page {
+  --s-accent:       var(--primary-color);
+  --s-accent-mid:   hsl(var(--primary-hsl) / 0.35);
+  --s-accent-dim:   hsl(var(--primary-hsl) / 0.12);
+  --s-bg:           var(--hud-root-bg);
+  --s-bg2:          var(--hud-topbar-bg);
+  --s-bg3:          var(--hud-thumb-bg);
+  --s-bg4:          var(--packet-bg);
+  --s-border:       var(--hud-footer-border);
+  --s-border-h:     var(--glow-border-hover);
+  --s-text-hi:      var(--text-main);
+  --s-text-md:      var(--text-dim);
+  --s-text-lo:      var(--text-dark);
+  --s-grid-gap:     var(--glow-grid-gap);
+  --s-danger-bg:    rgba(239, 68, 68, 0.08);
+  --s-danger-border: rgba(239, 68, 68, 0.4);
+
+  /* Preset DNA */
+  --s-dna-nd-grad:  linear-gradient(135deg, #0d0c14, #1a0a1a, #2a0a0a);
+  --s-dna-nd-acc:   #ff2d55;
+  --s-dna-cr-grad:  linear-gradient(135deg, #040d18, #0a1a2a, #001a30);
+  --s-dna-cr-acc:   #00d4ff;
+  --s-dna-sp-grad:  linear-gradient(135deg, #0d0c14, #1a0d0a, #2a1400);
+  --s-dna-sp-acc:   #ff6a00;
+  --s-dna-eu-grad:  linear-gradient(135deg, #0a0d14, #100a1a, #1a002a);
+  --s-dna-eu-acc:   #b44fff;
+  --s-dna-ov-grad:  linear-gradient(135deg, #040d0a, #001a0f, #002a10);
+  --s-dna-ov-acc:   #39ff14;
+  --s-dna-hz-grad:  linear-gradient(135deg, #0d0c14, #14100a, #2a1e00);
+  --s-dna-hz-acc:   #ffaa00;
+
+  /* Utility Accents */
+  --s-cyan:         #00d4ff;
+  --s-cyan-dim:     rgba(0, 212, 255, 0.4);
+}
+

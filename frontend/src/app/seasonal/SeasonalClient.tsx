@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useInView } from 'framer-motion';
 import { ChronosSlider } from '@/components/UI/TemporalSector/ChronosSlider';
 import { DataPacket } from '@/components/UI/DataPacket/DataPacket';
 import { FilterBar, useSeasonalFilters } from '@/components/UI/FilterBar/FilterBar';
 import { SeasonalAnimeEntry, Season } from '@/types/seasonal';
 import api from '@/api/client';
 import styles from './seasonal.module.css';
-import { seasonalGridVariants } from '@/animations/motions';
+import { seasonalGridVariants, scrollRevealVariants, RDS_VIEWPORT_OPTIONS } from '@/animations/motions';
+import { SkeletonHUD } from '../../components/UI';
 
 interface SeasonalClientProps {
   initialData: SeasonalAnimeEntry[];
@@ -34,7 +35,7 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
     const seasons: Season[] = ['WINTER', 'SPRING', 'SUMMER', 'FALL'];
     const oldIndex = seasons.indexOf(activeSeason);
     const newIndex = seasons.indexOf(s);
-    
+
     let dir: 1 | -1 = 1;
     if (y > activeYear) dir = 1;
     else if (y < activeYear) dir = -1;
@@ -81,29 +82,40 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
   return (
     <div style={{ background: 'var(--hud-root-bg)', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* HUD Topbar */}
-      <header style={{
-        background: 'var(--hud-topbar-bg)',
-        borderBottom: 'var(--sector-border)',
-        padding: '7px 14px',
-        fontFamily: 'var(--font-mono)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        zIndex: 10
-      }}>
-        <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: 'var(--spec-title-color)' }}>
+      <motion.header
+        variants={scrollRevealVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        style={{
+          background: 'var(--hud-topbar-bg)',
+          borderBottom: 'var(--sector-border)',
+          padding: '7px 14px',
+          fontFamily: 'var(--font-mono)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: 10
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          style={{ fontSize: '12px', letterSpacing: '0.1em', color: 'var(--spec-title-color)', fontWeight: 900 }}
+        >
           RONINHUB // SEASONAL INTEL // TEMPORAL SECTOR ACTIVE
-        </div>
-        <div style={{ fontSize: '10px', color: 'var(--spec-val-color)', display: 'flex', alignItems: 'center' }}>
-          SYS: <span style={{ color: 'var(--spec-val-color)', marginLeft: '4px', fontWeight: 800 }}>NOMINAL</span>
+        </motion.div>
+        <div style={{ fontSize: '12px', color: 'var(--spec-val-color)', display: 'flex', alignItems: 'center', fontWeight: 900 }}>
+          SYS: <span style={{ color: 'var(--spec-val-color)', marginLeft: '4px', fontWeight: 900 }}>NOMINAL</span>
           <motion.div
             animate={{ opacity: [1, 1, 0, 0, 1] }}
             transition={{ duration: 1.5, repeat: Infinity, times: [0, 0.45, 0.5, 0.95, 1], ease: "linear" }}
-            style={{ 
-              marginLeft: '8px', 
-              width: '8px', 
-              height: '8px', 
-              borderRadius: '50%', 
+            style={{
+              marginLeft: '8px',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
               background: 'var(--spec-val-color)',
               boxShadow: '0 0 8px var(--spec-val-color)'
             }}
@@ -114,50 +126,36 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
             style={{ marginLeft: '6px', width: '2px', height: '12px', background: 'currentColor' }}
           />
         </div>
-      </header>
+      </motion.header>
 
-      <ChronosSlider 
-        activeSector={activeSeason} 
-        activeYear={activeYear} 
-        onSectorChange={handleTemporalChange}
-        direction={direction}
-      />
+      <motion.div
+        variants={scrollRevealVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+      >
+        <ChronosSlider
+          activeSector={activeSeason}
+          activeYear={activeYear}
+          onSectorChange={handleTemporalChange}
+          direction={direction}
+        />
+      </motion.div>
 
-      <FilterBar />
+      <motion.div
+        variants={scrollRevealVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+      >
+        <FilterBar />
+      </motion.div>
 
       {/* Main Content Grid */}
       <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <AnimatePresence mode="wait">
           {loading ? (
-            <motion.div
-              key="loading"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'rgba(5, 5, 8, 0.8)',
-                zIndex: 20,
-                gap: '20px'
-              }}
-            >
-              <div style={{ 
-                width: '40px', 
-                height: '40px', 
-                border: '2px solid var(--glow-full)',
-                borderTopColor: 'transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }} />
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--glow-full)', letterSpacing: '0.2em' }}>
-                FETCHING_TEMPORAL_DATA...
-              </div>
-            </motion.div>
+            <SkeletonHUD />
           ) : (
             <motion.div
               key={`${activeSeason}-${activeYear}-${genre}-${sortBy}`}
@@ -166,22 +164,22 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
               variants={seasonalGridVariants}
               style={{
                 display: 'grid',
-                gridTemplateColumns: viewMode === 'LIST' ? '1fr' : 'repeat(4, 1fr)',
+                gridTemplateColumns: viewMode === 'LIST' ? '1fr' : 'repeat(6, 1fr)',
                 gap: '1px',
                 background: 'var(--glow-grid-gap)',
                 minHeight: '100%'
               }}
             >
               {filteredData.map((item, idx) => (
-                <DataPacket 
-                  key={item.id} 
-                  {...item} 
+                <DataPacket
+                  key={item.id}
+                  {...item}
                   index={idx}
                   horizontal={viewMode === 'LIST'}
                 />
               ))}
               {filteredData.length === 0 && (
-                <div style={{ gridColumn: viewMode === 'LIST' ? '1' : 'span 4', padding: '100px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
+                <div style={{ gridColumn: viewMode === 'LIST' ? '1' : 'span 6', padding: '100px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}>
                   NO INTEL FOUND FOR THIS SECTOR.
                 </div>
               )}
@@ -213,7 +211,7 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
           fontFamily: 'var(--font-mono)',
           letterSpacing: '0.08em'
         }}>
-          AniList GQL // HYBRID CACHE ACTIVE
+          {data[0]?.source_provider === 'jikan' ? 'Jikan REST' : 'AniList GQL'} // HYBRID CACHE ACTIVE
         </div>
       </footer>
     </div>

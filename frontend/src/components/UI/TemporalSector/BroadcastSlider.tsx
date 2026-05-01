@@ -75,15 +75,16 @@ export const BroadcastSlider: React.FC<BroadcastSliderProps> = ({
                   borderRadius: 0,
                   cursor: 'pointer',
                   transition: 'all 150ms',
-                  background: isActive ? 'var(--sector-active-bg)' : 'transparent',
-                  borderColor: isActive ? 'var(--sector-active-border)' : 'transparent',
+                  background: isActive ? 'var(--sector-active-bg)' : 'hsla(var(--primary-hsl) / 0)',
+                  borderColor: isActive ? 'var(--sector-active-border)' : 'hsla(var(--primary-hsl) / 0)',
                   position: 'relative'
                 }}
               >
                 <span style={{
                   fontFamily: 'var(--font-mono)',
-                  fontSize: '10px',
-                  letterSpacing: '0.05em',
+                  fontSize: '13px',
+                  fontWeight: 950,
+                  letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                   color: isActive ? 'var(--sector-label-active)' : 'var(--sector-label-inactive)',
                   display: 'block'
@@ -91,7 +92,8 @@ export const BroadcastSlider: React.FC<BroadcastSliderProps> = ({
                   {day.toUpperCase()}
                 </span>
                 <span style={{
-                  fontSize: '8px',
+                  fontSize: '11px',
+                  fontWeight: 950,
                   display: 'block',
                   marginTop: '2px',
                   color: isActive ? 'var(--sector-year-active)' : 'var(--sector-year-inactive)',

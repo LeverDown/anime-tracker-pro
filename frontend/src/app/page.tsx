@@ -6,7 +6,7 @@ import { AuthContext } from './AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Shield, ChevronRight, Sparkles, Mail, Lock } from 'lucide-react';
 import api from '../api/client';
-import { Button, Card, Input } from '../components/UI';
+import { Button, Card, Input, Particles } from '../components/UI';
 import styles from './login.module.css';
 
 /**
@@ -51,7 +51,6 @@ export default function LoginPage(): JSX.Element {
     try {
       if (isRegister) {
         await api.post('/auth/register', { username, password, email });
-        // Auto-login after registration
         setIsRegister(false);
         setError("REGISTRATION_SUCCESS_PLEASE_LOGIN");
       } else {
@@ -71,7 +70,8 @@ export default function LoginPage(): JSX.Element {
   if (!mounted) return <div className={styles.container} />;
 
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} rds-grid`}>
+      <Particles count={30} minSize={2} maxSize={8} />
       <div className={styles.wrapper}>
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -80,9 +80,18 @@ export default function LoginPage(): JSX.Element {
         >
           <div className={styles.header}>
             <motion.div 
-              animate={{ scale: [1, 1.05, 1] }}
+              animate={{ 
+                scale: [1, 1.05, 1],
+                opacity: [0.8, 1, 0.9, 1, 0.8],
+                skewX: [0, 2, 0, -1, 0]
+              }}
               transition={{ repeat: Infinity, duration: 4 }}
               className={styles.logoIcon}
+              style={{ cursor: 'pointer' }}
+              onClick={() => {
+                console.log("INITIALIZING_SENTRY_DIAGNOSTIC_TRIGGER...");
+                throw new Error("SENTRY_CLIENT_UPLINK_TEST_SUCCESSFUL");
+              }}
             >
               <Zap size={48} color="white" fill="white" />
             </motion.div>

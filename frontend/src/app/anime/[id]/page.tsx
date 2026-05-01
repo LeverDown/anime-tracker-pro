@@ -7,7 +7,7 @@ import UplinkGroup from '../../../components/UI/UplinkGroup/UplinkGroup';
 import SeasonalTimeline from '../../../components/UI/SeasonalTimeline/SeasonalTimeline';
 import { AuthContext } from '../../AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Star, Film, Users, Award,
   ChevronDown, Filter
 } from 'lucide-react';
@@ -39,44 +39,41 @@ function StatusDropdown({ value, onChange }: StatusDropdownProps): JSX.Element {
 
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
-      <button 
+      <button
         onClick={() => setIsOpen(!isOpen)}
         className={styles.statusBadge}
-        style={{ width: '100%', padding: 'var(--space-4)', justifyContent: 'space-between', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        style={{ width: '100%', padding: 'var(--space-4)', justifyContent: 'space-between', display: 'flex', alignItems: 'center' }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Filter size={18} color="var(--primary-color)" />
-          {value ? value.toUpperCase() : 'SELECT STATUS'}
+          <Filter size={14} color="var(--primary-color)" />
+          {value ? value.toUpperCase() : 'IDENTITY_STATUS // UNKNOWN'}
         </div>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }}>
-          <ChevronDown size={20} />
+          <ChevronDown size={16} />
         </motion.div>
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            initial={{ opacity: 0, y: 10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            exit={{ opacity: 0, y: 10, scale: 0.98 }}
             className="glass-panel"
-            style={{ 
-              position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
-              padding: '10px', zIndex: 1000
+            style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
+              padding: '0', zIndex: 1000, borderRadius: 0,
+              border: '1px solid var(--primary-color)',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.8)'
             }}
           >
             {options.map(opt => (
-              <div 
+              <div
                 key={opt}
                 onClick={() => { onChange(opt); setIsOpen(false); }}
-                style={{ 
-                  padding: '14px 20px', borderRadius: '14px', fontSize: '0.85rem', fontWeight: 800,
-                  color: value === opt ? 'var(--primary-color)' : 'var(--text-main)',
-                  background: value === opt ? 'rgba(255,255,255,0.05)' : 'transparent',
-                  cursor: 'pointer', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '0.75rem'
-                }}
+                className={`${styles.statusOption} ${value === opt ? styles.statusOptionSelected : ''}`}
               >
-                {value === opt && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--primary-color)', boxShadow: '0 0 10px var(--primary-color)' }} />}
+                {value === opt && <div style={{ width: '4px', height: '4px', background: 'var(--primary-color)', boxShadow: '0 0 8px var(--primary-color)' }} />}
                 {opt.toUpperCase()}
               </div>
             ))}
@@ -89,14 +86,14 @@ function StatusDropdown({ value, onChange }: StatusDropdownProps): JSX.Element {
 
 /**
  * AnimeDetailPage Protocol
- * Enforces strict typing, hydration safety, and RDS token synchronization.
+ * Enhanced with staggered animations and backdrop effects.
  */
 export default function AnimeDetailPage(): JSX.Element {
   const params = useParams();
   const id = params?.id;
   const auth = useContext(AuthContext);
   const user = auth?.user;
-  
+
   const [mounted, setMounted] = useState<boolean>(false);
   const [anime, setAnime] = useState<Anime | null>(null);
   const [smartRelations, setSmartRelations] = useState<any[]>([]);
@@ -114,15 +111,14 @@ export default function AnimeDetailPage(): JSX.Element {
       const response = await api.get(`/anime/details/${targetId}`);
       if (response.data && response.data.data) {
         setAnime(response.data.data);
-        
+
         // Async fetch relations via internal API if not already in data
         if (!response.data.data.relations || response.data.data.relations.length === 0) {
           api.get('/anime/relations/smart', { params: { idMal: targetId } })
              .then(r => setSmartRelations(r.data.data || []))
              .catch(() => setSmartRelations([]));
         } else {
-          // If relations are provided by AniList fallback, we flatten them slightly
-          const rels = response.data.data.relations.flatMap((r: any) => 
+          const rels = response.data.data.relations.flatMap((r: any) =>
             r.entry.map((e: any) => ({ ...e, relation: r.relation }))
           );
           setSmartRelations(rels);
@@ -142,29 +138,29 @@ export default function AnimeDetailPage(): JSX.Element {
     if (id) fetchDetails(id as string);
   }, [id, fetchDetails]);
 
-  const showToast = (msg: string): void => { 
-    setToast(msg); 
-    setTimeout(() => setToast(''), 3500); 
+  const showToast = (msg: string): void => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3500);
   };
 
   const handleSave = async (): Promise<void> => {
     if (!user || !saveStatus || !anime) return;
     try {
       await api.post('/collection', {
-        username: user, 
-        anime_id: anime.mal_id, 
+        username: user,
+        anime_id: anime.mal_id,
         title: anime.title,
         image_url: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-        status: saveStatus, 
-        score: anime.score || 0, 
+        status: saveStatus,
+        score: anime.score || 0,
         episodes: anime.episodes || 0,
-        genres: anime.genres?.map(g => g.name).join(', ') || '', 
+        genres: anime.genres?.map(g => g.name).join(', ') || '',
         idMal: anime.mal_id,
       });
-      showToast(`\u2705 [LOGGED] ${anime.title_english || anime.title} saved to ARCHIVE.`);
+      showToast(`✅ [LOGGED] ${anime.title_english || anime.title} saved to ARCHIVE.`);
     } catch (err) {
       console.error("Save error", err);
-      showToast("\u274C Failed to sync to Archive.");
+      showToast("❌ Failed to sync to Archive.");
     }
   };
 
@@ -178,96 +174,141 @@ export default function AnimeDetailPage(): JSX.Element {
     <div className={styles.container}>
       <AnimatePresence>
         {toast && (
-          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className={styles.toast}>
-            {toast}
+          <motion.div initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className={styles.toast}>
+            <span style={{ color: 'var(--primary-color)', marginRight: '8px' }}>[SYSTEM_MSG]</span> {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className={styles.backdrop}>
-        <img src={anime.images.jpg.large_image_url} alt="" className={styles.backdropImage} />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+        className={styles.backdrop}
+      >
+        <motion.img
+          initial={{ scale: 1.1, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+          src={anime.images.jpg.large_image_url}
+          alt=""
+          className={styles.backdropImage}
+        />
         <div className={styles.backdropOverlay} />
-      </div>
+      </motion.div>
 
-      <div className={styles.mainLayout}>
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className={styles.posterSection}>
-          <div className={`glass-panel ${styles.posterWrapper}`}>
+      <motion.div
+        className={styles.mainLayout}
+        variants={{
+          hidden: { opacity: 0 },
+          visible: {
+            opacity: 1,
+            transition: { staggerChildren: 0.1 }
+          }
+        }}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div
+          variants={{
+            hidden: { opacity: 0, scale: 0.95, y: 20 },
+            visible: { opacity: 1, scale: 1, y: 0 }
+          }}
+          className={styles.posterSection}
+        >
+          <div className={styles.posterWrapper}>
             <img src={anime.images.jpg.large_image_url} alt={anime.title} className={styles.poster} />
           </div>
-          
+
           {user && (
             <div className={styles.actionGroup}>
               <StatusDropdown value={saveStatus} onChange={setSaveStatus} />
-              <Button 
+              <Button
                 variant="primary"
                 fullWidth
                 glow={!!saveStatus}
                 disabled={!saveStatus}
                 onClick={handleSave}
-                style={{ padding: 'var(--space-4)', fontWeight: 900 }}
+                style={{ 
+                  padding: '16px', 
+                  fontWeight: 900, 
+                  fontSize: '11px', 
+                  letterSpacing: '0.2em',
+                  boxShadow: saveStatus ? '0 0 30px var(--primary-glow)' : 'none'
+                }}
               >
-                SYNC TO ARCHIVE
+                UPLINK_TO_ARCHIVE //
               </Button>
             </div>
           )}
         </motion.div>
 
         <div className={styles.infoSection}>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              visible: { opacity: 1, y: 0 }
+            }}
+          >
             <div className={styles.statsBar}>
-              <span className={styles.statusTag}>{anime.status}</span>
-              <span className={styles.scoreTag}>★ {anime.score ? (anime.score/10).toFixed(1) : 'N/A'}</span>
-              <span className={styles.typeTag}>{anime.type}</span>
+              <span><div style={{ width: '6px', height: '6px', background: 'var(--primary-color)' }} /> STATUS // {anime.status?.toUpperCase()}</span>
+              <span><div style={{ width: '6px', height: '6px', background: 'var(--text-dim)' }} /> SCORE // {anime.score ? (anime.score > 10 ? anime.score/10 : anime.score).toFixed(1) : 'N/A'}</span>
+              <span><div style={{ width: '6px', height: '6px', background: 'var(--text-dim)' }} /> TYPE // {anime.type?.toUpperCase()}</span>
             </div>
-
-            <SeasonalTimeline airing={anime.next_airing || null} status={anime.status} />
 
             <h1 className={styles.title}>
               {anime.title_english || anime.title}
             </h1>
-            <p className={styles.nativeTitle}>{anime.title_japanese || anime.title}</p>
+            <p className={styles.nativeTitle}>SYS // {anime.title_japanese || anime.title}</p>
 
             <div className={styles.statsGrid}>
               {[
-                { icon: Star, val: anime.score || '\u2014', label: 'SCORE', color: '#fbbf24' },
-                { icon: Film, val: anime.episodes || '?', label: 'EPISODES', color: 'var(--primary-color)' },
-                { icon: Users, val: (anime.members || 0).toLocaleString(), label: 'MEMBERS', color: '#06b6d4' },
-                { icon: Award, val: anime.rank ? `#${anime.rank}` : '\u2014', label: 'RANKING', color: '#fff' },
+                { val: anime.score ? (anime.score > 10 ? anime.score/10 : anime.score).toFixed(1) : '—', label: 'RATING_LVL' },
+                { val: anime.episodes || '?', label: 'DATA_UNITS' },
+                { val: (anime.members || 0).toLocaleString(), label: 'COGNITIVE_SYNC' },
+                { val: anime.rank ? `#${anime.rank}` : '—', label: 'SECTOR_RANK' },
               ].map((s) => (
-                <Card key={s.label} className={styles.statCard}>
-                  <s.icon size={16} color={s.color} style={{ marginBottom: '0.5rem' }} />
+                <div key={s.label} className={styles.statCard}>
                   <div className={styles.statVal}>{s.val}</div>
                   <div className={styles.statLabel}>{s.label}</div>
-                </Card>
+                </div>
               ))}
             </div>
 
             <div className={styles.genreGroup}>
               {anime.genres?.map((g) => (
-                <span key={g.name} className={`glass-panel ${styles.genreBadge}`}>{g.name.toUpperCase()}</span>
+                <span key={g.name} className={styles.genreBadge}>{g.name.toUpperCase()}</span>
               ))}
             </div>
           </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       <div className={styles.contentGrid}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className={styles.synopsisSection}>
-          <SeasonalTimeline airing={anime.next_airing || null} status={anime.status} />
-          
-          <Card className="glass-panel" style={{ padding: 'var(--space-10)', marginBottom: 'var(--space-8)' }}>
-            <h3 className={styles.cardHeader}>{"//"} SYNOPSIS</h3>
-            <p className={styles.synopsisBody}>{anime.synopsis || 'No synopsis available.'}</p>
-            <UplinkGroup links={anime.external_links || []} />
-          </Card>
+        <div className={styles.synopsisSection}>
+          <div style={{ marginBottom: 'var(--space-10)' }}>
+            <h3 className={styles.cardHeader}><div style={{ width: '12px', height: '12px', background: 'var(--primary-color)' }} /> DECK // SYNOPSIS</h3>
+            <div style={{ border: '1px solid var(--hud-footer-border)', padding: 'var(--space-8)', background: 'var(--hud-topbar-bg)' }}>
+              <p className={styles.synopsisBody}>{anime.synopsis || 'No synopsis available.'}</p>
+              <div style={{ marginTop: 'var(--space-8)', borderTop: '1px solid var(--hud-footer-border)', paddingTop: 'var(--space-6)' }}>
+                <UplinkGroup links={anime.external_links || []} />
+              </div>
+            </div>
+          </div>
 
-          <Card className="glass-panel" style={{ padding: 'var(--space-10)' }}>
-            <h3 className={styles.cardHeader}>{"//"} KEY_PERSONNEL</h3>
+          <div>
+            <h3 className={styles.cardHeader}><div style={{ width: '12px', height: '12px', background: 'var(--primary-color)' }} /> DECK // KEY_PERSONNEL</h3>
             <div className={styles.staffGrid}>
-              {characters.map((c) => {
+              {characters.map((c, i) => {
                 const jpv = c.voice_actors?.find((va: any) => va.language === 'Japanese');
                 return (
-                  <div key={c.character.mal_id} className={styles.personEntry}>
+                  <motion.div
+                    key={c.character.mal_id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 * i }}
+                    className={styles.personEntry}
+                  >
                     <div className={styles.personInfo}>
                       <img src={c.character.images?.jpg?.image_url} alt="" className={styles.charThumb} />
                       <div>
@@ -275,57 +316,64 @@ export default function AnimeDetailPage(): JSX.Element {
                         <div className={styles.charRole}>{c.role.toUpperCase()}</div>
                       </div>
                     </div>
-                    
+
                     {jpv && (
                       <div className={styles.vaInfo}>
                         <div>
-                          <div style={{ fontSize: '0.75rem', fontWeight: 800 }}>{jpv.person.name.toUpperCase()}</div>
-                          <div style={{ fontSize: '0.6rem', color: 'var(--text-dark)', fontWeight: 800 }}>VA / JP</div>
+                          <div style={{ fontSize: '11px', fontWeight: 900, fontFamily: 'var(--font-mono)' }}>{jpv.person.name.toUpperCase()}</div>
+                          <div style={{ fontSize: '9px', color: 'var(--text-dark)', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>VA / JP</div>
                         </div>
                         <img src={jpv.person.images?.jpg?.image_url} alt="" className={styles.vaThumb} />
                       </div>
                     )}
-                  </div>
+                  </motion.div>
                 );
               })}
             </div>
-          </Card>
-        </motion.div>
+          </div>
+        </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className={styles.sideSection}>
-          <Card className="glass-panel" style={{ padding: 'var(--space-8)', marginBottom: 'var(--space-8)' }}>
-            <h3 className={styles.cardHeader}>SYSTEM_INFO</h3>
+        <div className={styles.sideSection}>
+          <div style={{ marginBottom: 'var(--space-10)' }}>
+            <h3 className={styles.cardHeader}><div style={{ width: '12px', height: '12px', background: 'var(--primary-color)' }} /> SYS // INTEL</h3>
             <div className={styles.systemInfoList}>
               {[
-                { label: 'STUDIO', val: anime.studios?.map(s => s.name).join(', ') || '\u2014' },
-                { label: 'SOURCE', val: anime.source || '\u2014' },
-                { label: 'SEASON', val: anime.season ? `${anime.season} ${anime.year}` : '\u2014' },
-                { label: 'DURATION', val: anime.duration || '\u2014' },
+                { label: 'STUDIO', val: anime.studios?.map(s => s.name).join(', ') || '—' },
+                { label: 'SOURCE', val: anime.source || '—' },
+                { label: 'SEASON', val: anime.season ? `${anime.season} ${anime.year}` : '—' },
+                { label: 'DURATION', val: anime.duration || '—' },
               ].map(i => (
                 <div key={i.label} className={styles.systemInfoItem}>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 800, color: 'var(--text-dark)' }}>{i.label}</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>{i.val.toUpperCase()}</span>
+                  <span style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-dark)', fontFamily: 'var(--font-mono)' }}>{i.label}</span>
+                  <span style={{ fontSize: '11px', fontWeight: 900, fontFamily: 'var(--font-mono)' }}>{i.val.toUpperCase()}</span>
                 </div>
               ))}
             </div>
-          </Card>
+          </div>
 
           {(smartRelations.length > 0 || (anime as any).relations?.length > 0) && (
-            <Card className="glass-panel" style={{ padding: 'var(--space-8)' }}>
-              <h3 className={styles.cardHeader}>RELATIONS</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div>
+              <h3 className={styles.cardHeader}><div style={{ width: '12px', height: '12px', background: 'var(--primary-color)' }} /> SYS // RELATIONS</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                 {(smartRelations.length > 0 ? smartRelations : ((anime as any).relations?.flatMap((r: any) => r.entry.map((e: any) => ({ ...e, relation: r.relation }))) || []))
                   .filter((rel: any) => rel.type === 'anime' || !rel.type)
                   .slice(0, 8).map((rel: any, i: number) => (
-                  <Link key={i} href={`/anime/${rel.idMal || rel.mal_id}`} className={styles.relationLink}>
-                    <span style={{ fontSize: '0.6rem', color: 'var(--primary-color)', fontWeight: 800 }}>{rel.relation?.toUpperCase() || 'RELATED'}</span>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(rel.title_english || rel.name || rel.title)?.toUpperCase()}</span>
-                  </Link>
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                  >
+                    <Link href={`/anime/${rel.idMal || rel.mal_id}`} className={styles.relationLink}>
+                      <span style={{ fontSize: '9px', color: 'var(--primary-color)', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>{rel.relation?.toUpperCase() || 'RELATED'}</span>
+                      <span style={{ fontSize: '11px', fontWeight: 900, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-mono)' }}>{(rel.title_english || rel.name || rel.title)?.toUpperCase()}</span>
+                    </Link>
+                  </motion.div>
                 ))}
               </div>
-            </Card>
+            </div>
           )}
-        </motion.div>
+        </div>
       </div>
     </div>
   );

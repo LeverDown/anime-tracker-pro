@@ -41,7 +41,8 @@ export const FilterBar: React.FC = () => {
   const { genre, sortBy, viewMode, setGenre, setSortBy, setViewMode } = useSeasonalFilters();
 
   const chipStyle = (active: boolean): React.CSSProperties => ({
-    fontSize: '10px',
+    fontSize: '11.5px',
+    fontWeight: 900,
     padding: '3px 9px',
     border: '1px solid',
     borderRadius: 0,
@@ -57,7 +58,8 @@ export const FilterBar: React.FC = () => {
   });
 
   const categoryLabelStyle: React.CSSProperties = {
-    fontSize: '10px',
+    fontSize: '11.5px',
+    fontWeight: 900,
     color: 'var(--chip-category-color)',
     fontFamily: 'var(--font-mono)',
     letterSpacing: '0.1em',

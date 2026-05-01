@@ -15,6 +15,7 @@ export interface HSL {
  */
 export function hexToHSL(hex: string): HSL {
   let r = 0, g = 0, b = 0;
+  if (!hex) return { h: 0, s: 0, l: 0 };
   
   // Normalize hex
   const cleanHex = hex.replace('#', '');

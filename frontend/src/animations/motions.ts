@@ -86,8 +86,8 @@ export const mediaCardVariants: Variants = {
     transition: { duration: 0.3, ease: RDS_EASE_EXPO }
   },
   hover: {
-    scale: 1.02,
-    y: -4,
+    scale: 1,
+    y: -6,
     borderColor: 'var(--primary-color)',
     transition: { duration: 0.3, ease: RDS_EASE_EXPO }
   },
@@ -110,12 +110,80 @@ export const mediaCardVariants: Variants = {
  */
 export const seasonalGridVariants: Variants = {
   hidden: { opacity: 0 },
-  visible: { 
+  visible: {
     opacity: 1,
-    transition: { 
-      staggerChildren: 0.04, 
+    transition: {
+      staggerChildren: 0.04,
       delayChildren: 0.08,
       opacity: { duration: 0.5, ease: "linear" }
-    } 
+    }
   }
+};
+
+/**
+ * Scroll-Reveal Variants
+ * For elements that animate in when they enter the viewport
+ */
+export const scrollRevealVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 30,
+    scale: 0.98,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.5,
+      ease: RDS_EASE_EXPO,
+    },
+  },
+};
+
+/**
+ * Stagger Container Variants
+ * For grid layouts with staggered children animation
+ */
+export const staggerContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.1,
+    },
+  },
+};
+
+/**
+ * Hero Text Reveal Variants
+ * For large text elements with dramatic reveal
+ */
+export const heroTextVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 40,
+    letterSpacing: '0.5em',
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    letterSpacing: 'var(--tracking-wide)',
+    transition: {
+      duration: 0.6,
+      ease: RDS_EASE_EXPO,
+      letterSpacing: { duration: 0.8, ease: RDS_EASE_EXPO },
+    },
+  },
+};
+
+/**
+ * Viewport Reveal Hook Helper
+ * Returns viewport options for whileInView
+ */
+export const RDS_VIEWPORT_OPTIONS = {
+  once: false,
+  margin: '-50px 0px',
+  amount: 0.2,
 };

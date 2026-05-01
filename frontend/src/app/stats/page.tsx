@@ -54,7 +54,7 @@ export default function StatsPage(): JSX.Element {
 [METRIC_SUMMARY]
 > TITLES_SYNCED: ${stats.total_anime}
 > EPISODES_WATCHED: ${stats.total_episodes}
-> MEAN_SCORE: ${stats.mean_score?.toFixed(2)}
+> MEAN_SCORE: ${stats.mean_score?.toFixed(2) || '0.00'}
 > TIME_INVESTED: ${Math.floor((stats.total_episodes || 0) * 23 / 60)}h
 
 [GENRE_DNA_DISTRIBUTION]
@@ -77,24 +77,32 @@ ${genreData.map(([genre, count]: any) => `> ${genre.padEnd(20)} | ${count} TITLE
   if (!user) return <div className={styles.emptyState}><p className={styles.emptyText}>PLEASE INITIALIZE SESSION TO VIEW ANALYTICS.</p></div>;
 
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} rds-hatch`}>
       <header className={styles.header}>
-        <motion.h1 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className={styles.title}
-        >
-          <span className={styles.titlePrefix}>{"//"}</span> NEURAL_ANALYTICS
-        </motion.h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <h1 className={styles.title}>
+            <span className={styles.titlePrefix}>{"//"}</span> NEURAL_ANALYTICS
+          </h1>
+          <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
+            <span><Zap size={14} color="var(--primary-color)" /> SYS // METRICS_ACTIVE</span>
+            <span><Activity size={14} /> SECTOR // COGNITIVE_ANALYSIS</span>
+          </div>
+        </div>
 
-        <Card className={styles.reportCard}>
+        <div className={styles.reportCard}>
           <div className={styles.reportLabel}>
-            <Zap size={18} color="var(--primary-color)" />
-            NEURAL_METRICS_ACTIVE
+            INTEL_REPORT // READY
           </div>
           <div style={{ flex: 1 }} />
-          <Button variant="tactical" icon={<Star size={16} />} onClick={handleGenerateReport}>GENERATE_REPORT</Button>
-        </Card>
+          <Button 
+            variant="primary" 
+            icon={<Star size={16} />} 
+            onClick={handleGenerateReport}
+            style={{ borderRadius: 0, fontSize: '10px', fontWeight: 900, fontFamily: 'var(--font-mono)', letterSpacing: '2px' }}
+          >
+            GENERATE_REPORT //
+          </Button>
+        </div>
       </header>
 
       {loading ? (
@@ -104,52 +112,52 @@ ${genreData.map(([genre, count]: any) => `> ${genre.padEnd(20)} | ${count} TITLE
       ) : (
         <>
           <div className={styles.metricsGrid}>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <Card className={styles.metricCard}>
-                <div className={styles.metricIcon} style={{ color: 'var(--primary-color)' }}><BarChart3 size={32} /></div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <div className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--primary-color)' }}><BarChart3 size={24} /></div>
                 <h2 className={styles.metricValue}>{stats?.total_anime || 0}</h2>
                 <p className={styles.metricLabel}>TITLES_SYNCED</p>
-              </Card>
+              </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-              <Card className={styles.metricCard}>
-                <div className={styles.metricIcon} style={{ color: 'var(--accent-cyan)' }}><Clock size={32} /></div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <div className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--accent-cyan)' }}><Clock size={24} /></div>
                 <h2 className={styles.metricValue}>{stats?.total_episodes || 0}</h2>
                 <p className={styles.metricLabel}>EPISODES_WATCHED</p>
-              </Card>
+              </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-              <Card className={styles.metricCard}>
-                <div className={styles.metricIcon} style={{ color: 'var(--warning)' }}><TrendingUp size={32} /></div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <div className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--warning)' }}><TrendingUp size={24} /></div>
                 <h2 className={styles.metricValue}>{stats?.mean_score?.toFixed(2) || '0.00'}</h2>
                 <p className={styles.metricLabel}>MEAN_SCORE</p>
-              </Card>
+              </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-              <Card className={styles.metricCard}>
-                <div className={styles.metricIcon} style={{ color: 'var(--success)' }}><Activity size={32} /></div>
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+              <div className={styles.metricCard}>
+                <div className={styles.metricIcon} style={{ color: 'var(--success)' }}><Activity size={24} /></div>
                 <h2 className={styles.metricValue}>{Math.floor((stats?.total_episodes || 0) * 23 / 60)}h</h2>
                 <p className={styles.metricLabel}>TIME_INVESTED</p>
-              </Card>
+              </div>
             </motion.div>
           </div>
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
           >
-            <Card className={styles.genreCard}>
+            <div className={styles.genreCard}>
               <h3 className={styles.genreTitle}>
-                <PieChart size={18} style={{ marginRight: '0.75rem', verticalAlign: 'middle' }} />
-                GENRE_DISTRIBUTION_ANALYSIS
+                <PieChart size={18} color="var(--primary-color)" />
+                GENRE_DISTRIBUTION_ANALYSIS //
               </h3>
               
               {genreData.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '4rem', color: 'var(--text-dark)' }}>NO_GENRE_DATA_SYNCED</div>
+                <div className={styles.emptyState}>NO_GENRE_DATA_SYNCED</div>
               ) : (
                 <div className={styles.genreList}>
                   {genreData.map(([genre, count]: any) => (
@@ -170,7 +178,7 @@ ${genreData.map(([genre, count]: any) => `> ${genre.padEnd(20)} | ${count} TITLE
                   ))}
                 </div>
               )}
-            </Card>
+            </div>
           </motion.div>
         </>
       )}

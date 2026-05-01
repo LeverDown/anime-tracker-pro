@@ -57,24 +57,31 @@ export default function CommunityPage(): JSX.Element {
   if (!mounted) return <div className={styles.skeletonCard} />;
 
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} rds-hatch`}>
       <header className={styles.header}>
-        <motion.h1 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className={styles.title}
-        >
-          <span className={styles.titlePrefix}>{"//"}</span> COMMUNITY_HUB
-        </motion.h1>
+        <div className={styles.headerTop} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h1 className={styles.title}>
+            <span className={styles.titlePrefix}>{"//"}</span> COMMUNITY_HUB
+          </h1>
+          <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
+            <span><Activity size={14} color="var(--primary-color)" /> SYS // LIVE_STREAM</span>
+            <span><Users size={14} /> SECTOR // GLOBAL_INTEL</span>
+          </div>
+        </div>
 
-        <Card className={styles.toolbar}>
+        <div className={styles.toolbar}>
           <div className={styles.toolbarLabel}>
-            <Activity size={18} color="var(--primary-color)" />
-            REAL_TIME_INTEL_STREAM
+            INTEL_STATUS // NOMINAL
           </div>
           <div style={{ flex: 1 }} />
-          <Button variant="tactical" icon={<Users size={16} />}>FRIENDS_ONLY</Button>
-        </Card>
+          <Button 
+            variant="secondary" 
+            icon={<Users size={16} />}
+            style={{ borderRadius: 0, fontSize: '10px', fontWeight: 900, fontFamily: 'var(--font-mono)' }}
+          >
+            FRIENDS_ONLY //
+          </Button>
+        </div>
       </header>
 
       <div className={styles.feedContainer}>
@@ -83,9 +90,9 @@ export default function CommunityPage(): JSX.Element {
             <div key={i} className={styles.skeletonCard} />
           ))
         ) : activities.length === 0 ? (
-          <Card className={styles.emptyState}>
+          <div className={styles.emptyState}>
             <p className={styles.emptyText}>NO RECENT ACTIVITY DETECTED IN THE SECTOR.</p>
-          </Card>
+          </div>
         ) : (
           activities.map((act, i) => (
             <motion.div
@@ -94,7 +101,7 @@ export default function CommunityPage(): JSX.Element {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
             >
-              <Card className={styles.activityCard}>
+              <div className={styles.activityCard}>
                 <div className={styles.activityLayout}>
                   <div className={styles.avatar}>
                     {act.username ? act.username[0].toUpperCase() : '?'}
@@ -104,16 +111,16 @@ export default function CommunityPage(): JSX.Element {
                       <div>
                         <span className={styles.userLabel}>{act.username}</span>
                         <span className={styles.actionLabel}>
-                          {act.action}
+                          {act.action?.toUpperCase()}
                         </span>
                       </div>
                       <span className={styles.timestamp}>
-                        {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        SYNC_TIME // {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     
                     <div className={styles.subjectPanel}>
-                      <span className={styles.subjectTitle}>{act.anime_title}</span>
+                      <span className={styles.subjectTitle}>{act.anime_title?.toUpperCase()}</span>
                     </div>
 
                     <div className={styles.engagement}>
@@ -129,7 +136,7 @@ export default function CommunityPage(): JSX.Element {
                     </div>
                   </div>
                 </div>
-              </Card>
+              </div>
             </motion.div>
           ))
         )}

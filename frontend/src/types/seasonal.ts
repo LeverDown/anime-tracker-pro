@@ -12,11 +12,14 @@ export interface AiringSchedule {
 export interface AnimeTitle {
   romaji: string;
   english?: string | null;
+  native?: string | null;
 }
 
 export interface CoverImage {
   large: string;
   medium?: string;
+  extraLarge?: string;
+  color?: string;
 }
 
 export interface SeasonalAnimeEntry {
@@ -30,4 +33,5 @@ export interface SeasonalAnimeEntry {
   status: AnimeStatus;
   format: AnimeFormat;
   popularity: number;
+  source_provider?: string;
 }

@@ -80,11 +80,11 @@ export default function SchedulePage(): JSX.Element {
         backdropFilter: 'blur(10px)',
         zIndex: 10
       }}>
-        <div style={{ fontSize: '10px', letterSpacing: '0.1em', color: 'var(--spec-title-color)', fontFamily: 'var(--font-mono)' }}>
+        <div style={{ fontSize: '12px', letterSpacing: '0.1em', color: 'var(--spec-title-color)', fontFamily: 'var(--font-mono)', fontWeight: 900 }}>
           RONINHUB // BROADCAST INTEL // TEMPORAL SCHEDULE ACTIVE
         </div>
-        <div style={{ fontSize: '10px', color: 'var(--spec-val-color)', display: 'flex', alignItems: 'center', fontFamily: 'var(--font-mono)' }}>
-          SYS: <span style={{ color: 'var(--spec-val-color)', marginLeft: '4px', fontWeight: 800 }}>NOMINAL</span>
+        <div style={{ fontSize: '12px', color: 'var(--spec-val-color)', display: 'flex', alignItems: 'center', fontFamily: 'var(--font-mono)', fontWeight: 900 }}>
+          SYS: <span style={{ color: 'var(--spec-val-color)', marginLeft: '4px', fontWeight: 900 }}>NOMINAL</span>
           <motion.div
             animate={{ opacity: [1, 1, 0, 0, 1] }}
             transition={{ duration: 1.5, repeat: Infinity, times: [0, 0.45, 0.5, 0.95, 1], ease: "linear" }}
@@ -106,7 +106,7 @@ export default function SchedulePage(): JSX.Element {
         direction={direction}
       />
 
-      <main style={{ flex: 1, position: 'relative', overflowY: 'auto', padding: '20px' }} className="rds-scroll">
+      <main style={{ flex: 1, position: 'relative', overflowY: 'auto' }} className="rds-scroll">
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div
@@ -125,13 +125,15 @@ export default function SchedulePage(): JSX.Element {
           ) : (
             <motion.div
               key={activeDay}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-                gap: '20px'
+                gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: '1px',
+                background: 'var(--glow-grid-gap)',
+                minHeight: '100%'
               }}
             >
               {airing.map((item, idx) => (

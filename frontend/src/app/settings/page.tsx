@@ -1,349 +1,285 @@
 "use client";
-import React, { useState, useEffect, useContext, JSX, useRef } from 'react';
+import React, { useState, useContext, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Settings as SettingsIcon, Save, Image as ImageIcon, 
-  Palette, Shield, User, LogOut, RefreshCcw, 
-  Monitor, Cloud, Check, Upload, Trash2, Camera
-} from 'lucide-react';
 import { AuthContext } from '../AuthContext';
-import api, { BACKEND_URL } from '../../api/client';
+import { VisualDNAPresets } from './VisualDNAPresets';
+import { IdentityModule } from './IdentityModule';
+import { AtmosphereOverride } from './AtmosphereOverride';
+import { NotificationConfig } from './NotificationConfig';
+import { SecurityProtocol } from './SecurityProtocol';
+import { SettingsState, PresetName, Visibility } from '@/types/settings';
+import { Button } from '@/components/UI';
+import { hexToHSLString } from '@/utils/color';
+import api from '@/api/client';
 import { getUserProfile, updateProfile, getUserThemeSelection } from '@/api/user';
-import { Button, Card, Input } from '../../components/UI';
-import { hexToHSL } from '@/utils/color';
 import styles from './settings.module.css';
 
-/* eslint-disable @next/next/no-img-element */
-/* eslint-disable react-hooks/set-state-in-effect */
+const PRESET_COLORS: Record<PresetName, string> = {
+  NEURAL_DARK: '#ff2d55',
+  CRYOGENIC: '#00d4ff',
+  SPECTRAL: '#ff6a00',
+  EUPHORIC: '#b44fff',
+  OVERRIDE: '#39ff14',
+  HAZARD: '#ffaa00',
+};
 
-const THEMES = [
-  { id: 'Dark', label: 'NEURAL_DARK', color: '#ff0055' },
-  { id: 'Winter', label: 'CRYOGENIC', color: '#00f2ff' },
-  { id: 'Halloween', label: 'SPECTRAL', color: '#ff6600' },
-  { id: 'White', label: 'EUPHORIC', color: '#2563eb' },
-  { id: 'Custom', label: 'OVERRIDE', color: '#00ff00' },
-];
+const INITIAL_STATE: SettingsState = {
+  activePreset: 'NEURAL_DARK',
+  glassmorphism: true,
+  scanAnimations: true,
+  profileVisibility: 'PUBLIC',
+  listVisibility: 'PUBLIC',
+  activityFeed: true,
+  atmosphere: {
+    file: null,
+    parallax: false,
+    blurIntensity: 12,
+    opacity: 0.35
+  },
+  notifications: {
+    airingAlerts: true,
+    seasonalIntel: true,
+    communityFeed: true,
+    scoreUpdates: false,
+    systemAlerts: true,
+    backlogReminders: false,
+    deliveryMode: 'IN_APP + PUSH',
+    quietHoursStart: '02:00',
+    quietHoursEnd: '08:00'
+  },
+  customColor: '#00ff00',
+  profile: null,
+  isDirty: false,
+  dirtyCount: 0
+};
 
-/**
- * SettingsPage Protocol — v3.1 (Multi-Asset DNA)
- * Decouples global atmosphere backgrounds from profile-specific hero banners.
- */
-export default function SettingsPage(): JSX.Element {
+export default function SettingsPage() {
   const auth = useContext(AuthContext);
-  const user = auth?.user;
-  
-  const [theme, setTheme] = useState<string>('Dark');
-  const [banner, setBanner] = useState<string>(''); // Profile Hero
-  const [atmosphere, setAtmosphere] = useState<string>(''); // Global BG
-  const [pfp, setPfp] = useState<string>('');
-  const [customColor, setCustomColor] = useState<string>('#ff0055');
-  const [saving, setSaving] = useState<boolean>(false);
-  const [mounted, setMounted] = useState<boolean>(false);
-  const [uploading, setUploading] = useState<'atmosphere' | 'banner' | 'pfp' | null>(null);
+  const [state, setState] = useState<SettingsState>(INITIAL_STATE);
 
-  const bannerRef = useRef<HTMLInputElement>(null);
-  const atmosRef = useRef<HTMLInputElement>(null);
-  const pfpRef = useRef<HTMLInputElement>(null);
+  const [lastSavedState, setLastSavedState] = useState<Partial<SettingsState> | null>(null);
 
+  const applyTheme = useCallback((preset: PresetName, customColor?: string) => {
+    const color = preset === 'OVERRIDE' ? (customColor || state.customColor) : (PRESET_COLORS[preset] || PRESET_COLORS.NEURAL_DARK);
+    document.documentElement.style.setProperty('--primary-color', color);
+    document.documentElement.style.setProperty('--primary-hsl', hexToHSLString(color));
+  }, [state.customColor]);
+
+  // Sync theme live on preset change (Optimistic Update)
   useEffect(() => {
-    setMounted(true);
+    applyTheme(state.activePreset);
+    
+    // Apply Glassmorphism effect
+    document.documentElement.style.setProperty('--glass-bg', state.glassmorphism ? 'rgba(21, 31, 46, 0.7)' : '#151f2e');
+    
+    // Apply Scan Animation effect (Global Scanline)
+    document.documentElement.style.setProperty('--scan-line-opacity', state.scanAnimations ? '0.1' : '0');
+    
+    // Apply Parallax effect
+    document.documentElement.style.setProperty('--parallax-intensity', state.atmosphere.parallax ? '1' : '0');
+    document.documentElement.style.setProperty('--parallax-attachment', state.atmosphere.parallax ? 'scroll' : 'fixed');
+  }, [state.activePreset, state.customColor, state.glassmorphism, state.scanAnimations, state.atmosphere.parallax, applyTheme]);
+
+  // Initial Load
+  useEffect(() => {
+    if (!auth?.user) return;
+    
+    Promise.all([
+      getUserProfile(auth.user),
+      getUserThemeSelection(auth.user)
+    ]).then(([profile, themeData]) => {
+      const legacyMap: Record<string, PresetName> = {
+        'Dark': 'NEURAL_DARK', 'Winter': 'CRYOGENIC', 'Halloween': 'SPECTRAL', 'White': 'EUPHORIC', 'Custom': 'OVERRIDE'
+      };
+      const preset = legacyMap[themeData.selection] || themeData.selection as PresetName;
+
+      // Load persistent preferences from localStorage
+      const cachedNotifications = localStorage.getItem(`notifications_${auth.user}`);
+      const cachedAtmosphere = localStorage.getItem(`atmosphere_${auth.user}`);
+      const cachedVisibility = localStorage.getItem(`visibility_${auth.user}`);
+
+      const loadedState: SettingsState = {
+        ...INITIAL_STATE,
+        profile: profile,
+        customColor: profile.theme_color || INITIAL_STATE.customColor,
+        activePreset: preset || 'NEURAL_DARK',
+        notifications: cachedNotifications ? JSON.parse(cachedNotifications) : INITIAL_STATE.notifications,
+        atmosphere: cachedAtmosphere ? JSON.parse(cachedAtmosphere) : INITIAL_STATE.atmosphere,
+        profileVisibility: (cachedVisibility as Visibility) || INITIAL_STATE.profileVisibility
+      };
+
+      setState(loadedState);
+      setLastSavedState(loadedState);
+    }).catch(console.error);
+  }, [auth?.user]);
+
+  const updateState = useCallback((patch: Partial<SettingsState>) => {
+    setState(prev => {
+      const newState = { ...prev, ...patch, isDirty: true };
+      return { ...newState, dirtyCount: newState.isDirty ? prev.dirtyCount + 1 : 0 };
+    });
   }, []);
 
-  useEffect(() => {
-    if (!user || !mounted) return;
-    
-    getUserThemeSelection(user)
-      .then(data => setTheme(data.selection || 'Dark'))
-      .catch(console.error);
-    
-    getUserProfile(user)
-      .then(data => {
-        setBanner(data.banner_url || '');
-        setAtmosphere(data.atmosphere_url || '');
-        setCustomColor(data.theme_color || '#ff0055');
-        setPfp(data.pfp_url || '');
-      })
-      .catch(console.error);
-  }, [user, mounted]);
-
-  const handleThemeChange = (newTheme: string) => {
-    setTheme(newTheme);
-    const themeConfig = THEMES.find(t => t.id === newTheme);
-    const activeColor = newTheme === 'Custom' ? customColor : (themeConfig?.color || '#ff0055');
-    document.documentElement.style.setProperty('--primary-color', activeColor);
-    
-    // Sync RDS HSL system
-    const hsl = hexToHSL(activeColor);
-    if (hsl) {
-      document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
-    }
-  };
-
-  const handleCustomColorChange = (color: string) => {
-    setCustomColor(color);
-    if (theme === 'Custom') {
-      document.documentElement.style.setProperty('--primary-color', color);
-      const hsl = hexToHSL(color);
-      if (hsl) {
-        document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
-      }
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'atmosphere' | 'banner' | 'pfp') => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    setUploading(type);
-    const formData = new FormData();
-    formData.append('file', file);
-
+  const handleSave = async () => {
+    if (!auth?.user) return;
     try {
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      const url = res.data.url;
-      if (type === 'atmosphere') {
-        setAtmosphere(url);
-        document.documentElement.style.setProperty('--custom-bg', `url(${BACKEND_URL}${url})`);
-      } else if (type === 'banner') {
-        setBanner(url);
-      } else {
-        setPfp(url);
-      }
-    } catch (err) {
-      console.error("Upload failed", err);
-    } finally {
-      setUploading(null);
-    }
-  };
-
-  const handleSave = async (): Promise<void> => {
-    if (!user) return;
-    setSaving(true);
-    try {
-      const activeColor = theme === 'Custom' ? customColor : (THEMES.find(t => t.id === theme)?.color || '#ff0055');
+      const activeColor = state.activePreset === 'OVERRIDE' ? state.customColor : PRESET_COLORS[state.activePreset];
       
-      await api.post('/user/theme/selection', { username: user, selection: theme });
-      await updateProfile({ 
-        username: user, 
-        banner_url: banner, 
-        atmosphere_url: atmosphere,
-        pfp_url: pfp,
+      await api.post('/user/theme/selection', { username: auth.user, selection: state.activePreset });
+      await updateProfile({
+        username: auth.user,
         theme_color: activeColor
       });
-      
-      localStorage.setItem(`theme_color_${user}`, activeColor);
-      localStorage.setItem(`theme_bg_${user}`, atmosphere); // For global sync
-      
+
+      // Persist all preferences
+      localStorage.setItem(`theme_color_${auth.user}`, activeColor);
+      localStorage.setItem(`notifications_${auth.user}`, JSON.stringify(state.notifications));
+      localStorage.setItem(`atmosphere_${auth.user}`, JSON.stringify(state.atmosphere));
+      localStorage.setItem(`visibility_${auth.user}`, state.profileVisibility);
+
+      setState(prev => ({ ...prev, isDirty: false, dirtyCount: 0 }));
+      setLastSavedState(state);
       alert("SYSTEM_SYNC_COMPLETE: CONFIGURATION_LOCKED");
     } catch (err) {
-      console.error("Save failed", err);
-    }
-    setSaving(false);
-  };
-
-  const handleExport = async (): Promise<void> => {
-    if (!user) return;
-    try {
-      const res = await api.get('/collection/export', { params: { username: user } });
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(res.data, null, 2));
-      const downloadAnchorNode = document.createElement('a');
-      downloadAnchorNode.setAttribute("href", dataStr);
-      downloadAnchorNode.setAttribute("download", `roninhub_archive_${user}_${new Date().toISOString().split('T')[0]}.json`);
-      document.body.appendChild(downloadAnchorNode);
-      downloadAnchorNode.click();
-      downloadAnchorNode.remove();
-    } catch (err) {
-      console.error("Export failed", err);
+      console.error("SAVE_FAILED", err);
+      alert("SYSTEM_SYNC_FAILURE: CONNECTION_LOST");
     }
   };
 
-  const handleSync = async (): Promise<void> => {
-    if (!user) return;
-    try {
-      const data = await getUserThemeSelection(user);
-      setTheme(data.selection || 'Dark');
-      const pr = await getUserProfile(user);
-      setBanner(pr.banner_url || '');
-      setAtmosphere(pr.atmosphere_url || '');
-      setCustomColor(pr.theme_color || '#ff0055');
-      alert("NEURAL_SYNC_SUCCESS: DNA_REGENERATED");
-    } catch (err) {
-      console.error("Sync failed", err);
+  const handleDiscard = () => {
+    if (lastSavedState) {
+      setState({ ...lastSavedState as SettingsState, isDirty: false, dirtyCount: 0 });
     }
   };
-
-  const getPreviewUrl = (url: string) => {
-    if (!url) return '';
-    return url.startsWith('/') ? `${BACKEND_URL}${url}` : url;
-  };
-
-  if (!mounted) return <div className={styles.skeletonCard} />;
-  if (!user) return <div className={styles.emptyState}>PLEASE INITIALIZE SESSION TO ACCESS SETTINGS.</div>;
 
   return (
-    <div className={styles.container}>
-      <header className={styles.header}>
-        <motion.h1 initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className={styles.title}>
-          <span className={styles.titlePrefix}>{"//"}</span> SYSTEM_SETTINGS
-        </motion.h1>
-
-        <Card className={styles.saveBar}>
-          <div className={styles.reportLabel}>
-            <SettingsIcon size={18} color="var(--primary-color)" />
-            USER_PREFERENCE_OVERRIDE
+    <div className={`${styles.settingsPage} settings-page rds-hatch`}>
+      <header style={{
+        padding: '20px 20px 12px',
+        borderBottom: '1px solid var(--s-border)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        background: 'var(--s-bg2)'
+      }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--s-text-hi)', margin: 0 }}>
+            <span style={{ color: 'var(--s-accent)' }}>//</span> SYSTEM_SETTINGS
+          </h1>
+          <div style={{ fontSize: '11px', color: 'var(--s-text-lo)', letterSpacing: '0.12em', marginTop: '6px', fontWeight: 500 }}>
+            USER_PREFERENCE_OVERRIDE // READY
           </div>
-          <div style={{ flex: 1 }} />
-          <Button variant="primary" icon={<Save size={16} />} onClick={handleSave} disabled={saving}>
-            {saving ? 'SYNCING...' : 'SAVE_CONFIGURATION'}
-          </Button>
-        </Card>
+        </div>
+
+        <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '20px', fontSize: '11px', fontWeight: 600, color: 'var(--s-text-md)', letterSpacing: '0.08em' }}>
+            <span>⚙ SYS // CONFIG_ACTIVE</span>
+            <span>◉ SECTOR // CORE_IDENTITY</span>
+          </div>
+        </div>
       </header>
 
-      <div className={styles.settingsGrid}>
-        {/* Visual DNA Selection */}
-        <Card className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <Palette size={20} color="var(--primary-color)" />
-            <h3 className={styles.sectionTitle}>VISUAL_DNA_PRESETS</h3>
-          </div>
-          
-          <div className={styles.themeGrid}>
-            {THEMES.map(t => (
-              <div
-                key={t.id}
-                onClick={() => handleThemeChange(t.id)}
-                className={`${styles.themeOption} ${theme === t.id ? styles.themeOptionActive : ''}`}
-              >
-                <div className={styles.colorIndicator} style={{ background: t.color }} />
-                <span className={styles.themeName}>{t.label}</span>
-                {theme === t.id && <Check size={14} style={{ marginLeft: 'auto', marginRight: '10px' }} />}
+      <AnimatePresence>
+        {state.isDirty && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            style={{ padding: '0 20px', marginTop: '8px', overflow: 'hidden' }}
+          >
+            <div style={{
+              background: 'rgba(255,45,85,0.08)',
+              border: '1px solid var(--s-accent-mid)',
+              padding: '7px 14px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--s-accent)', letterSpacing: '0.08em' }}>
+                ⚡ UNSAVED_CHANGES_DETECTED // {state.dirtyCount} PARAMETERS MODIFIED
               </div>
-            ))}
-          </div>
-
-          <AnimatePresence>
-            {theme === 'Custom' && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ marginTop: '2rem', overflow: 'hidden' }}>
-                <p className={styles.metricLabel} style={{ marginBottom: '1rem' }}>CUSTOM_HEX_OVERRIDE</p>
-                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                  <div className={styles.colorPickerWrapper}>
-                    <input type="color" value={customColor} onChange={e => handleCustomColorChange(e.target.value)} className={styles.realColorPicker} />
-                    <div className={styles.colorPickerVisual} style={{ background: customColor }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <Input value={customColor} onChange={e => handleCustomColorChange(e.target.value)} />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </Card>
-
-        {/* Atmosphere Override (Global) */}
-        <Card className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <Monitor size={20} color="var(--accent-cyan)" />
-            <h3 className={styles.sectionTitle}>ATMOSPHERE_OVERRIDE</h3>
-          </div>
-          
-          <div className={styles.imageSection}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p className={styles.metricLabel}>GLOBAL_BACKGROUND</p>
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                icon={<Upload size={14} />}
-                onClick={() => atmosRef.current?.click()}
-                disabled={uploading === 'atmosphere'}
-              >
-                {uploading === 'atmosphere' ? 'UPLOADING...' : 'UPLOAD_ATMOSPHERE'}
-              </Button>
-              <input type="file" ref={atmosRef} hidden accept="image/*" onChange={e => handleFileUpload(e, 'atmosphere')} />
-            </div>
-            
-            <div className={styles.previewContainer}>
-              {atmosphere ? (
-                <>
-                  <img src={getPreviewUrl(atmosphere)} className={styles.previewImage} alt="Preview" />
-                  <button className={styles.removeBtn} onClick={() => { setAtmosphere(''); document.documentElement.style.setProperty('--custom-bg', 'none'); }}>
-                    <Trash2 size={16} />
-                  </button>
-                </>
-              ) : (
-                <div className={styles.previewPlaceholder}>
-                  <ImageIcon size={32} opacity={0.2} />
-                  NO_ATMOSPHERE_LOADED
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Identity Module (Profile Specific) */}
-        <Card className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <User size={20} color="var(--success)" />
-            <h3 className={styles.sectionTitle}>IDENTITY_MODULE</h3>
-          </div>
-          
-          <div className={styles.identityContainer}>
-            <div className={styles.bannerPreview}>
-              {banner ? (
-                <img src={getPreviewUrl(banner)} className={styles.bannerImage} alt="Banner" />
-              ) : (
-                <div className={styles.bannerPlaceholder}>NO_IDENTITY_BANNER</div>
-              )}
-              <button className={styles.bannerUploadBtn} onClick={() => bannerRef.current?.click()} disabled={uploading === 'banner'}>
-                <ImageIcon size={14} style={{ marginRight: '6px' }} />
-                {uploading === 'banner' ? 'UPLOADING...' : 'REPROGRAM_BANNER'}
-              </button>
-              <input type="file" ref={bannerRef} hidden accept="image/*" onChange={e => handleFileUpload(e, 'banner')} />
-            </div>
-
-            <div className={styles.identityRow}>
-              <div className={styles.avatarWrapper}>
-                <div className={styles.avatar} style={{ background: 'var(--primary-color)' }}>
-                  {pfp ? (
-                    <img src={getPreviewUrl(pfp)} className={styles.pfpImage} alt="Avatar" />
-                  ) : (
-                    user[0].toUpperCase()
-                  )}
-                </div>
-                <button className={styles.pfpUploadBtn} onClick={() => pfpRef.current?.click()}>
-                  <Camera size={14} />
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button 
+                  onClick={handleDiscard}
+                  style={{ background: 'transparent', border: '1px solid var(--s-border)', color: 'var(--s-text-md)', padding: '6px 12px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  DISCARD //
                 </button>
-                <input type="file" ref={pfpRef} hidden accept="image/*" onChange={e => handleFileUpload(e, 'pfp')} />
-              </div>
-              <div className={styles.identityInfo}>
-                <h4>{user.toUpperCase()}</h4>
-                <p>STATUS: ONLINE</p>
-                <p>ACCESS_LEVEL: ELITE_01</p>
+                <button 
+                  onClick={handleSave}
+                  style={{ background: 'var(--s-accent)', color: 'var(--s-text-hi)', border: 'none', padding: '6px 12px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  APPLY_CHANGES //
+                </button>
               </div>
             </div>
-          </div>
-        </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-        {/* Security Protocol */}
-        <Card className={styles.sectionCard}>
-          <div className={styles.sectionHeader}>
-            <Shield size={20} color="var(--warning)" />
-            <h3 className={styles.sectionTitle}>SECURITY_PROTOCOL</h3>
+      <div className={styles.layout}>
+        <main className={styles.main}>
+          <div className={styles.grid2}>
+            <VisualDNAPresets 
+              activePreset={state.activePreset}
+              onPresetChange={(p) => updateState({ activePreset: p })}
+              customColor={state.customColor}
+              setCustomColor={(c) => updateState({ customColor: c })}
+              glassmorphism={state.glassmorphism}
+              setGlassmorphism={(v) => updateState({ glassmorphism: v })}
+              scanAnimations={state.scanAnimations}
+              setScanAnimations={(v) => updateState({ scanAnimations: v })}
+            />
+            <IdentityModule 
+              username={state.profile?.username || auth?.user || 'ROTTENFRUIT'}
+              profile={state.profile}
+              visibility={state.profileVisibility}
+              setVisibility={(v) => updateState({ profileVisibility: v })}
+              activityFeed={state.activityFeed}
+              setActivityFeed={(v) => updateState({ activityFeed: v })}
+            />
           </div>
-          <div className={styles.securityActions}>
-            <Button variant="secondary" className={styles.ghostButton} fullWidth icon={<RefreshCcw size={16} />} onClick={handleSync}>
-              SYNC_DATA_LOCALLY
-            </Button>
-            <Button variant="secondary" className={styles.ghostButton} fullWidth icon={<Cloud size={16} />} onClick={handleExport}>
-              EXPORT_ARCHIVE
-            </Button>
-            <Button variant="secondary" className={styles.dangerButton} fullWidth icon={<LogOut size={16} />} onClick={() => auth?.logout?.()}>
-              TERMINATE_SESSION
-            </Button>
+          <div className={styles.grid3}>
+            <AtmosphereOverride 
+              config={state.atmosphere}
+              onChange={(c) => updateState({ atmosphere: c })}
+            />
+            <NotificationConfig 
+              prefs={state.notifications}
+              onChange={(p) => updateState({ notifications: p })}
+            />
+            <SecurityProtocol 
+              onLogout={() => {
+                if (confirm('TERMINATE_ALL_SESSIONS?')) {
+                  auth?.logout();
+                }
+              }}
+            />
           </div>
-        </Card>
+        </main>
       </div>
+
+      <footer style={{
+        height: '32px',
+        background: 'var(--s-bg2)',
+        borderTop: '1px solid var(--s-border)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 24px',
+        fontSize: '10px',
+        fontWeight: 500,
+        letterSpacing: '0.08em',
+        color: 'var(--s-text-lo)',
+        flexShrink: 0
+      }}>
+        <div>
+          CONFIG_SESSION // ACTIVE — {state.dirtyCount} UNSAVED PARAMETERS
+        </div>
+        <div>
+          RONINHUB v2.4.1 // BUILD_A1F2C9 // SYS: NOMINAL <span className={styles.cursor}>▋</span>
+        </div>
+      </footer>
     </div>
   );
 }

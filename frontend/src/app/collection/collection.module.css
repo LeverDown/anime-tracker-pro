@@ -3,31 +3,29 @@
 }
 
 .header {
-  margin-bottom: var(--space-12);
+  margin-bottom: var(--space-8);
+  border-bottom: 1px solid var(--hud-footer-border);
+  background: var(--hud-topbar-bg);
+  padding: 12px 20px;
 }
 
 .topRow {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  margin-bottom: var(--space-8);
-}
- 
-.rouletteButton {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-glow-heavy) 100%);
-  box-shadow: 0 0 15px var(--primary-glow);
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); box-shadow: 0 0 15px var(--primary-glow); }
-  50% { transform: scale(1.02); box-shadow: 0 0 25px var(--primary-glow-heavy); }
-  100% { transform: scale(1); box-shadow: 0 0 15px var(--primary-glow); }
+  align-items: center;
+  margin-bottom: 20px;
 }
 
 .title {
-  font-size: var(--font-size-2xl);
-  font-weight: var(--font-weight-black);
+  font-size: 24px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-transform: uppercase;
 }
 
 .titlePrefix {
@@ -36,135 +34,126 @@
 
 .actionGroup {
   display: flex;
-  gap: var(--space-4);
+  gap: var(--space-3);
+}
+
+.rouletteButton {
+  background: var(--primary-color) !important;
+  color: white !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  box-shadow: 0 0 20px var(--primary-glow);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.9; box-shadow: 0 0 10px var(--primary-glow); }
+  50% { opacity: 1; box-shadow: 0 0 25px var(--primary-glow-heavy); }
+  100% { opacity: 0.9; box-shadow: 0 0 10px var(--primary-glow); }
 }
 
 .filterCard {
-  padding: var(--space-2);
-  border-radius: var(--radius-lg);
-  margin-bottom: var(--space-8);
-  background: rgba(5, 5, 8, 0.4);
-  border: 1px solid var(--glass-border);
-  position: relative;
+  margin-bottom: 12px;
+  background: transparent;
+  border: none !important;
 }
 
 .statusList {
   display: flex;
-  gap: var(--space-2);
-  position: relative;
+  gap: 8px;
+  background: transparent;
+  border: none;
   overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.statusList::-webkit-scrollbar {
-  display: none;
+  padding-bottom: 4px;
 }
 
 .statusButton {
-  flex: 1;
-  min-width: 140px;
-  position: relative;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-black);
-  letter-spacing: var(--tracking-wider);
+  padding: 8px 16px;
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-dim);
   display: flex;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+  gap: 10px;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border: none;
-  background: transparent;
-  z-index: 2;
+  transition: all 0.2s;
+  background: var(--bg-deep);
+  border: 1px solid var(--hud-footer-border);
+  border-radius: 0;
+  white-space: nowrap;
 }
 
 .statusButtonActive {
-  color: white;
-}
-
-.statusButtonIcon {
-  opacity: 0.6;
-  transition: var(--transition-fast);
-}
-
-.statusButtonActive .statusButtonIcon {
-  opacity: 1;
-  color: inherit;
+  background: var(--glow-active-bg);
+  color: var(--text-main);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 15px var(--glow-border);
 }
 
 .countBadge {
-  font-size: 9px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
+  font-size: 10px;
   color: var(--text-dark);
-  margin-left: var(--space-2);
+  font-weight: 400;
+  opacity: 0.6;
 }
 
 .statusButtonActive .countBadge {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
-}
-
-.tabHighlight {
-  position: absolute;
-  top: var(--space-2);
-  bottom: var(--space-2);
-  border-radius: var(--radius-md);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 1;
+  color: var(--primary-color);
+  opacity: 1;
 }
 
 .searchRow {
   display: flex;
-  gap: var(--space-4);
+  gap: 1px;
+  align-items: center;
+  margin-top: 12px;
+  background: var(--hud-footer-border);
+  border: 1px solid var(--hud-footer-border);
 }
 
 .searchInputWrapper {
   flex: 1;
 }
 
-/* 
- * DISCOVER-STYLE COLLECTION GRID 
- */
 .collectionGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-8);
-  margin-bottom: var(--space-12);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1px;
+  background: var(--hud-footer-border);
+  width: 100%;
 }
 
 .stackWrapper {
   position: relative;
-  height: 340px;
+  background: var(--hud-topbar-bg);
 }
 
 .stackLayer {
   position: absolute;
-  top: -6px;
-  left: 6px;
-  right: 6px;
+  top: -4px;
+  left: 4px;
+  right: 4px;
   height: 100%;
-  background: var(--bg-card);
-  border: 1px solid var(--glass-border);
-  clip-path: var(--tactical-corner);
+  background: var(--hud-topbar-bg);
+  border: 1px solid var(--hud-footer-border);
   z-index: 1;
   opacity: 0.6;
 }
 
 .stackLayerDouble {
   position: absolute;
-  top: -12px;
-  left: 12px;
-  right: 12px;
+  top: -8px;
+  left: 8px;
+  right: 8px;
   height: 100%;
-  background: var(--bg-card);
-  border: 1px solid var(--glass-border);
-  clip-path: var(--tactical-corner);
+  background: var(--hud-topbar-bg);
+  border: 1px solid var(--hud-footer-border);
   z-index: 0;
   opacity: 0.3;
 }
@@ -172,8 +161,9 @@
 .seriesCard {
   position: relative;
   z-index: 2;
-  height: 100% !important;
-  padding: 0 !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: var(--hud-topbar-bg) !important;
 }
 
 .collectionOverlay {
@@ -181,10 +171,23 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: var(--space-4) var(--space-4) var(--space-3);
-  background: linear-gradient(to top, rgba(5, 5, 8, 0.9) 0%, transparent 100%);
+  padding: 12px;
+  background: linear-gradient(to top, rgba(5, 5, 8, 0.95), transparent);
   z-index: 10;
   pointer-events: none;
+}
+
+.seriesTitle {
+  font-size: 16px;
+  font-weight: 950;
+  color: var(--text-main);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
 }
 
 .cardMetadata {
@@ -192,135 +195,94 @@
   justify-content: space-between;
   align-items: center;
   pointer-events: auto;
-}
-
-.seriesTitle {
-  font-size: 13px;
-  font-weight: 900;
-  color: white;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 8px;
+  border: 1px solid var(--hud-footer-border);
 }
 
 .progressLabel {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 900;
-  color: var(--text-dark);
-  letter-spacing: 1px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
 }
 
 .stackIndicator {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 8px;
-  font-weight: 900;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 950;
   color: var(--primary-color);
   cursor: pointer;
-  padding: 3px 6px;
-  background: rgba(0,0,0,0.6);
-  backdrop-filter: blur(4px);
-  border: 1px solid var(--glass-border);
-  border-radius: 2px;
-  transition: var(--transition-fast);
+  font-family: var(--font-mono);
   pointer-events: auto;
+  transition: all 0.2s;
+  background: var(--bg-deep);
+  padding: 2px 8px;
+  border: 1px solid var(--hud-footer-border);
 }
 
 .stackIndicator:hover {
-  background: var(--primary-color);
-  color: white;
-  box-shadow: 0 0 10px var(--primary-glow);
+  background: var(--glow-active-bg);
+  border-color: var(--primary-color);
+  color: var(--text-main);
 }
 
 .stackDropdown {
   position: absolute;
   inset: 0;
-  background: rgba(5, 5, 8, 0.98);
-  backdrop-filter: blur(20px);
+  background: var(--bg-deep);
   border: 1px solid var(--primary-color);
-  padding: var(--space-4);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   z-index: 30;
-  scrollbar-width: thin;
-  scrollbar-color: var(--primary-color) transparent;
   pointer-events: auto;
   overflow-y: auto;
-}
-
-.closeDropdown {
-  background: transparent;
-  border: none;
-  color: var(--text-dark);
-  cursor: pointer;
-  transition: var(--transition-fast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.closeDropdown:hover {
-  color: var(--danger);
-  transform: rotate(90deg);
 }
 
 .dropdownHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-4);
-  padding-bottom: var(--space-2);
-  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--hud-footer-border);
 }
 
 .dropdownTitle {
   font-size: 10px;
   font-weight: 900;
   color: var(--primary-color);
-  letter-spacing: 1.5px;
+  font-family: var(--font-mono);
   text-transform: uppercase;
-}
-
-.stackDropdown::-webkit-scrollbar {
-  width: 4px;
-}
-
-.stackDropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.stackDropdown::-webkit-scrollbar-thumb {
-  background: var(--primary-color);
-  border-radius: 10px;
 }
 
 .dropdownItem {
   display: flex;
   justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-radius: 4px;
+  align-items: center;
+  padding: 8px;
   font-size: 10px;
   cursor: pointer;
-  transition: var(--transition-fast);
+  font-family: var(--font-mono);
+  background: var(--hud-topbar-bg);
+  border: 1px solid transparent;
 }
 
 .dropdownItem:hover {
-  background: var(--glass-shine);
-  color: var(--primary-color);
+  background: var(--glow-active-bg);
+  border-color: var(--primary-color);
 }
 
 .dropdownItemTitle {
-  font-weight: var(--font-weight-bold);
-  white-space: nowrap;
+  font-weight: 800;
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
 }
 
 .dropdownItemProgress {
@@ -329,7 +291,7 @@
 }
 
 .sliderContainer {
-  margin-top: var(--space-2);
+  margin-top: 8px;
   display: flex;
   align-items: center;
   position: relative;
@@ -340,40 +302,19 @@
 .episodeSlider {
   -webkit-appearance: none;
   width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  height: 2px;
+  background: var(--hud-footer-border);
   outline: none;
-  cursor: pointer;
-  transition: all 0.3s;
 }
 
 .episodeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--primary-color);
-  border: 2px solid white;
-  border-radius: 50%;
-  box-shadow: 0 0 10px var(--primary-glow);
+  border-radius: 0;
   cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.episodeSlider::-webkit-slider-thumb:hover {
-  transform: scale(1.3);
-}
-
-.episodeSlider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  background: var(--primary-color);
-  border: 2px solid white;
-  border-radius: 50%;
   box-shadow: 0 0 10px var(--primary-glow);
-  cursor: pointer;
-  transition: transform 0.2s;
 }
 
 .progressBar {
@@ -381,14 +322,14 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 3px;
-  background: rgba(255,255,255,0.1);
+  height: 2px;
+  background: transparent;
   z-index: 15;
 }
 
 .progressFill {
   height: 100%;
-  transition: width 0.6s var(--transition-smooth);
+  transition: width 0.6s var(--ease-out);
   background: var(--primary-color);
   box-shadow: 0 0 10px var(--primary-glow);
 }
@@ -396,27 +337,99 @@
 .emptyState {
   grid-column: 1 / -1;
   text-align: center;
-  padding: var(--space-20);
-  border: 1px dashed var(--glass-border);
-  border-radius: var(--radius-lg);
+  padding: 100px;
+  border: 1px dashed var(--hud-footer-border);
 }
 
 .emptyText {
   color: var(--text-dim);
-  font-weight: var(--font-weight-black);
-  letter-spacing: var(--tracking-widest);
+  font-weight: 900;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
 }
 
 .skeletonCard {
-  height: 360px;
-  background: var(--bg-panel);
+  height: 300px;
+  background: var(--hud-topbar-bg);
   opacity: 0.2;
-  border-radius: var(--radius-lg);
-  animation: pulse 2s infinite;
+  animation: pulse-op 2s infinite;
+  border: 1px solid var(--hud-footer-border);
 }
 
-@keyframes pulse {
+@keyframes pulse-op {
   0% { opacity: 0.1; }
   50% { opacity: 0.3; }
   100% { opacity: 0.1; }
+}
+
+.dropdownItemContent {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-right: 12px;
+}
+
+.purgeSeason {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid var(--hud-footer-border);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.purgeSeason:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+}
+
+.purgeButton {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--hud-footer-border);
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.purgeButton:hover {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+  transform: scale(1.1);
+}
+
+.closeDropdown {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 4px;
+}
+
+.closeDropdown:hover {
+  color: var(--primary-color);
+  transform: rotate(90deg);
 }

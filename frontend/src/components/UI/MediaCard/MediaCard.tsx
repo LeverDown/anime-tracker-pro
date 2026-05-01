@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Users, Info } from 'lucide-react';
 import { MediaCardProps, InteractionStatus } from './MediaCard.types';
@@ -26,19 +26,31 @@ export const MediaCard = ({
   onClick,
   className,
   children
-}: MediaCardProps & { 
-  children?: React.ReactNode; 
+}: MediaCardProps & {
+  children?: React.ReactNode;
   overflow?: 'hidden' | 'visible';
   showDefaultOverlay?: boolean;
 }) => {
   const [currentStatus, setCurrentStatus] = useState<InteractionStatus>(initialStatus);
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseEnter = () => {
-    // We only use state for non-hover interaction statuses like loading/success/error
-  };
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const rotateY = (x - 0.5) * 10;
+    const rotateX = (0.5 - y) * 10;
+
+    cardRef.current.style.setProperty('--rotate-x', `${rotateX}deg`);
+    cardRef.current.style.setProperty('--rotate-y', `${rotateY}deg`);
+  }, []);
 
   const handleMouseLeave = () => {
-    // Hover is handled by whileHover
+    if (cardRef.current) {
+      cardRef.current.style.setProperty('--rotate-x', '0deg');
+      cardRef.current.style.setProperty('--rotate-y', '0deg');
+    }
   };
 
   const cardClasses = [
@@ -50,15 +62,20 @@ export const MediaCard = ({
 
   return (
     <motion.div
+      ref={cardRef}
       className={cardClasses}
       variants={mediaCardVariants}
       initial="idle"
       animate={currentStatus === 'hover' ? 'idle' : currentStatus}
       whileHover="hover"
-      onMouseEnter={handleMouseEnter}
+      onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onClick={onClick}
-      style={{ overflow }}
+      style={{
+        overflow,
+        perspective: '1000px',
+        transform: `perspective(1000px) rotateX(var(--rotate-x, 0deg)) rotateY(var(--rotate-y, 0deg))`,
+      }}
     >
       <AnimatePresence mode="wait">
         {currentStatus === 'loading' && (
@@ -77,7 +94,7 @@ export const MediaCard = ({
         <div className={`${styles.statusIndicator} ${styles[`status${currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}`]}`} />
       )}
 
-      <div className={styles.imageWrapper}>
+      <div className={`${styles.imageWrapper} rds-scan-lines`}>
         <img 
           src={imageUrl || 'https://via.placeholder.com/400x600?text=NO_IMAGE'} 
           alt={title} 

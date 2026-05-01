@@ -3,13 +3,22 @@
 }
 
 .header {
-  margin-bottom: var(--space-12);
+  margin-bottom: var(--space-8);
+  border-bottom: 1px solid var(--hud-footer-border);
+  background: var(--hud-topbar-bg);
+  padding: 12px 18px;
 }
 
 .title {
-  font-size: var(--font-size-2xl);
-  margin-bottom: var(--space-6);
-  font-weight: var(--font-weight-black);
+  font-size: 24px;
+  font-weight: 950;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-transform: uppercase;
 }
 
 .titlePrefix {
@@ -17,49 +26,66 @@
 }
 
 .toolbar {
-  padding: var(--space-5);
+  margin-top: 12px;
   display: flex;
   gap: var(--space-6);
   align-items: center;
+  padding: 0;
+  background: transparent;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 .toolbarLabel {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
   color: var(--text-dim);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-extrabold);
+  font-size: 10px;
+  font-weight: 900;
+  font-family: var(--font-mono);
+  letter-spacing: 0.2em;
 }
 
 .feedContainer {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
+  padding: var(--space-8) 0;
 }
 
 .activityCard {
-  margin-bottom: var(--space-6);
+  margin-bottom: 1px;
   padding: var(--space-6);
+  background: var(--hud-topbar-bg);
+  border: 1px solid var(--hud-footer-border);
+  border-radius: 0 !important;
+  transition: all 0.2s var(--ease-out);
+}
+
+.activityCard:hover {
+  border-color: var(--primary-color);
+  background: var(--glow-active-bg);
 }
 
 .activityLayout {
   display: flex;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-md);
-  background: var(--primary-color);
+  width: 44px;
+  height: 44px;
+  border-radius: 0;
+  background: var(--hud-thumb-bg);
+  border: 1px solid var(--hud-footer-border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-black);
-  color: white;
-  box-shadow: 0 0 15px var(--primary-glow);
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--primary-color);
   flex-shrink: 0;
+  font-family: var(--font-mono);
 }
 
 .mainContent {
@@ -70,50 +96,53 @@
 .headerRow {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
 .userLabel {
-  font-weight: var(--font-weight-black);
-  color: white;
-  font-size: var(--font-size-md);
+  font-weight: 900;
+  color: var(--text-main);
+  font-size: 13px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
 }
 
 .actionLabel {
   color: var(--text-dim);
-  font-size: var(--font-size-sm);
-  margin-left: var(--space-2);
+  font-size: 11px;
+  margin-left: var(--space-3);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
 }
 
 .timestamp {
-  font-size: var(--font-size-xs);
+  font-size: 10px;
   color: var(--text-dark);
+  font-family: var(--font-mono);
+  font-weight: 800;
 }
 
 .subjectPanel {
   margin-top: var(--space-3);
-  padding: var(--space-4);
-  background: var(--glass-shine);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--glass-border);
+  padding: 10px 14px;
+  background: var(--glow-chip-bg);
+  border-radius: 0;
+  border: 1px solid var(--hud-footer-border);
 }
 
 .subjectTitle {
   color: var(--primary-color);
-  font-weight: var(--font-weight-black);
-  font-size: var(--font-size-sm);
-}
-
-.subjectDetail {
-  margin-left: var(--space-2);
-  color: var(--text-dim);
-  font-size: var(--font-size-xs);
+  font-weight: 900;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
 }
 
 .engagement {
   display: flex;
-  gap: var(--space-6);
-  margin-top: var(--space-4);
+  gap: var(--space-8);
+  margin-top: var(--space-6);
 }
 
 .engagementButton {
@@ -121,12 +150,13 @@
   border: none;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   color: var(--text-dark);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-extrabold);
+  font-size: 10px;
+  font-weight: 900;
   cursor: pointer;
-  transition: var(--transition-fast);
+  transition: all 0.2s;
+  font-family: var(--font-mono);
 }
 
 .engagementButton:hover {
@@ -135,28 +165,32 @@
 
 .emptyState {
   text-align: center;
-  padding: var(--space-20);
-  border: 1px dashed var(--glass-border);
-  border-radius: var(--radius-lg);
+  padding: 100px;
+  border: 1px dashed var(--hud-footer-border);
+  border-radius: 0;
+  background: transparent;
 }
 
 .emptyText {
   color: var(--text-dim);
-  font-weight: var(--font-weight-extrabold);
-  letter-spacing: var(--tracking-widest);
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  font-size: 11px;
+  font-family: var(--font-mono);
 }
 
 .skeletonCard {
-  height: 120px;
-  margin-bottom: var(--space-6);
-  background: var(--bg-panel);
-  opacity: 0.2;
-  border-radius: var(--radius-lg);
+  height: 140px;
+  margin-bottom: 1px;
+  background: var(--hud-topbar-bg);
+  opacity: 0.3;
+  border-radius: 0;
   animation: pulse 2s infinite;
+  border: 1px solid var(--hud-footer-border);
 }
 
 @keyframes pulse {
-  0% { opacity: 0.1; }
-  50% { opacity: 0.3; }
-  100% { opacity: 0.1; }
+  0% { opacity: 0.2; }
+  50% { opacity: 0.4; }
+  100% { opacity: 0.2; }
 }
