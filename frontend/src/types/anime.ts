@@ -40,15 +40,15 @@ export interface Anime {
   episodes?: number;
   status: string;
   airing: boolean;
-  score: number | null;
-  scored_by: number | null;
-  rank: number | null;
-  popularity: number | null;
-  members: number | null;
-  duration: string | null;
-  synopsis: string | null;
-  season: string | null;
-  year: number | null;
+  score: number | null | undefined;
+  scored_by: number | null | undefined;
+  rank: number | null | undefined;
+  popularity: number | null | undefined;
+  members: number | null | undefined;
+  duration: string | null | undefined;
+  synopsis: string | null | undefined;
+  season: string | null | undefined;
+  year: number | null | undefined;
   studios?: { name: string }[];
   genres?: { name: string }[];
   characters?: Character[]; 
@@ -93,13 +93,20 @@ export interface Relation {
 }
 
 export interface CollectionEntry {
+  username: string;
   anime_id: number;
   title: string;
   image_url: string;
   status: string;
   score: number | null;
   episodes: number | null;
-  genres?: string;
+  genres: string;
+  review?: string;
+  progress: number;
+  seasons_json: string;
+  series_name?: string;
+  coop_friend_username?: string | null;
+  drop_reason?: string | null;
 }
 
 export interface BacklogMeta {
@@ -114,16 +121,23 @@ export interface BacklogMeta {
   } | null;
 }
 
+export interface UserStats {
+  total_anime: number;
+  total_episodes: number;
+  mean_score: number;
+  genre_counts: Record<string, number>;
+}
+
 export interface Notification {
   message: string;
   is_read: boolean;
   created_at: string;
 }
 
-export interface SeasonalResponse {
-  data: Anime[];
-  pagination: {
-    last_visible_page: number;
-    has_next_page: boolean;
-  };
+export interface PageInfo {
+  total: number;
+  lastPage: number;
+  hasNextPage: boolean;
 }
+
+export type AnimeResult = Anime;

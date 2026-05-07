@@ -6,7 +6,7 @@ import { ChronosSlider } from '@/components/UI/TemporalSector/ChronosSlider';
 import { DataPacket } from '@/components/UI/DataPacket/DataPacket';
 import { FilterBar, useSeasonalFilters } from '@/components/UI/FilterBar/FilterBar';
 import { SeasonalAnimeEntry, Season } from '@/types/seasonal';
-import api from '@/api/client';
+import { useSeasonalAnime } from '@/hooks/queries/useAnime';
 import styles from './seasonal.module.css';
 import { seasonalGridVariants, scrollRevealVariants, RDS_VIEWPORT_OPTIONS } from '@/animations/motions';
 import { SkeletonHUD } from '../../components/UI';
@@ -20,15 +20,18 @@ interface SeasonalClientProps {
 export const SeasonalClient: React.FC<SeasonalClientProps> = ({
   initialData,
   initialSeason,
-  initialYear
+  initialYear,
 }) => {
-  const [data, setData] = useState<SeasonalAnimeEntry[]>(initialData);
-  const [loading, setLoading] = useState(false);
   const [activeSeason, setActiveSeason] = useState<Season>(initialSeason);
   const [activeYear, setActiveYear] = useState<number>(initialYear);
   const [direction, setDirection] = useState<1 | -1>(1);
 
   const { genre, sortBy, viewMode } = useSeasonalFilters();
+
+  const { data: seasonalData, isPending: loading } = useSeasonalAnime(activeYear, activeSeason, 1);
+  
+  // Use initialData if we are on the initial season/year and have no fetched data yet
+  const data = seasonalData?.data || (activeSeason === initialSeason && activeYear === initialYear ? initialData : []);
 
   // Handle season/year changes
   const handleTemporalChange = (s: Season, y: number) => {
@@ -46,34 +49,22 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
     setActiveYear(y);
   };
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const response = await api.get('/anime/seasonal', {
-          params: { year: activeYear, season: activeSeason }
-        });
-        setData(response.data.data || []);
-      } catch (err) {
-        console.error("Failed to fetch seasonal data", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [activeSeason, activeYear]);
-
   // Filter and Sort logic
-  const filteredData = data.filter(item => {
-    if (genre !== 'ALL' && !item.genres.map(g => g.toUpperCase()).includes(genre)) return false;
+  const filteredData = data.filter((item: any) => {
+    const genres = item.genres || [];
+    if (genre !== 'ALL' && !genres.map((g: any) => (typeof g === 'string' ? g : g.name).toUpperCase()).includes(genre)) return false;
     return true;
-  }).sort((a, b) => {
-    if (sortBy === 'SCORE') return (b.averageScore || 0) - (a.averageScore || 0);
-    if (sortBy === 'POPULARITY') return b.popularity - a.popularity;
+  }).sort((a: any, b: any) => {
+    const aScore = a.averageScore ?? a.average_score ?? 0;
+    const bScore = b.averageScore ?? b.average_score ?? 0;
+    const aPop = a.popularity ?? 0;
+    const bPop = b.popularity ?? 0;
+    
+    if (sortBy === 'SCORE') return bScore - aScore;
+    if (sortBy === 'POPULARITY') return bPop - aPop;
     if (sortBy === 'AIRTIME') {
-      const aTime = a.nextAiringEpisode?.airingAt || Infinity;
-      const bTime = b.nextAiringEpisode?.airingAt || Infinity;
+      const aTime = a.nextAiringEpisode?.airingAt || a.airing_at || Infinity;
+      const bTime = b.nextAiringEpisode?.airingAt || b.airing_at || Infinity;
       return aTime - bTime;
     }
     return 0;
@@ -170,9 +161,9 @@ export const SeasonalClient: React.FC<SeasonalClientProps> = ({
                 minHeight: '100%'
               }}
             >
-              {filteredData.map((item, idx) => (
+              {filteredData.map((item: any, idx: number) => (
                 <DataPacket
-                  key={item.id}
+                  key={item.id_mal || item.id}
                   {...item}
                   index={idx}
                   horizontal={viewMode === 'LIST'}

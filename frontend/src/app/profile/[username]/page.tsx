@@ -6,7 +6,7 @@ import { AuthContext } from '../../AuthContext';
 
 import styles from './profile.module.css';
 import { Button, MediaCard } from '../../../components/UI';
-import { User, Activity, Zap, Star, Share2, Users } from 'lucide-react';
+import { User, Activity, Star, Share2, Users } from 'lucide-react';
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -33,11 +33,6 @@ export default function PublicProfilePage() {
       .finally(() => setLoading(false));
   }, [username]);
 
-  const handleAddFriend = async () => {
-    if (!user) return;
-    await api.post('/community/friends', { username: user, friend_username: username });
-    showToast(`Friend sync established: ${username}`);
-  };
 
   const tasteMap: Record<string, string> = {
     "Action": "SHOUNEN_JUNKIE", "Romance": "ROMANCE_CONNOISSEUR", "Comedy": "GAG_MASTER",
@@ -61,7 +56,7 @@ export default function PublicProfilePage() {
             <span className={styles.titlePrefix}>{"//"}</span> NEURAL_IDENTITY
           </h1>
           <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
-            <span><Zap size={14} color="var(--primary-color)" /> SYS // PUBLIC_PROFILE</span>
+            <span><Activity size={14} color="var(--primary-color)" /> SYS // PUBLIC_PROFILE</span>
             <span><User size={14} /> SECTOR // USER_CORE</span>
           </div>
         </div>
@@ -96,16 +91,7 @@ export default function PublicProfilePage() {
           </div>
 
           <div className={styles.actionGroup}>
-            {user && user !== username && (
-              <Button 
-                variant="primary" 
-                onClick={handleAddFriend}
-                icon={<Users size={16} />}
-                style={{ borderRadius: 0, fontSize: '10px', fontWeight: 900, fontFamily: 'var(--font-mono)' }}
-              >
-                SYNC_FRIEND //
-              </Button>
-            )}
+            {/* SYNC_FRIEND logic removed during Community Purge */}
             <Button 
               variant="secondary" 
               onClick={() => { navigator.clipboard.writeText(window.location.href); showToast('Link copied!'); }}
@@ -119,11 +105,13 @@ export default function PublicProfilePage() {
       </div>
 
       {/* ── Stats Row ───────────────────────────────────────────── */}
-      <div className={styles.statsGrid}>
+      <div className={styles.statsGrid} style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
         {[
-          { val: profile.total_titles, label: 'TOTAL_TITLES', icon: <Activity size={20} /> },
-          { val: profile.completed, label: 'COMPLETED', icon: <Zap size={20} /> },
-          { val: profile.avg_score || '—', label: 'AVG_SCORE', icon: <Star size={20} /> },
+          { val: profile.total_titles ?? 0, label: 'TITLES', icon: <Activity size={20} /> },
+          { val: profile.completed ?? 0, label: 'COMPLETED', icon: <Activity size={20} /> },
+          { val: profile.total_episodes ?? 0, label: 'EPISODES', icon: <Activity size={20} /> },
+          { val: profile.avg_score?.toFixed(1) ?? '—', label: 'AVG_SCORE', icon: <Star size={20} /> },
+          { val: profile.days_watched ?? 0, label: 'DAYS', icon: <Activity size={20} /> },
         ].map(({ val, label, icon }) => (
           <div key={label} className={styles.statCard}>
             <div className={styles.statIcon} style={{ color: 'var(--primary-color)' }}>{icon}</div>
@@ -137,7 +125,7 @@ export default function PublicProfilePage() {
       {profile.top_genres?.length > 0 && (
         <div className={styles.sectionCard}>
           <h2 className={styles.sectionTitle}>
-            <Zap size={14} /> TOP_GENRE_DNA //
+            <Activity size={14} /> TOP_GENRE_DNA //
           </h2>
           <div className={styles.genreList}>
             {profile.top_genres.map((g: any) => (

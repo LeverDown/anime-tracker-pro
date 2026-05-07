@@ -1,5 +1,6 @@
 "use client";
 import React, { createContext, useState, useEffect, ReactNode, JSX } from 'react';
+import api from '@/api/client';
 /* eslint-disable react-hooks/set-state-in-effect */
 
 interface AuthContextType {
@@ -20,16 +21,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }): JSX.Element
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    const saved = localStorage.getItem("username");
-    if (saved) {
-      setUser(saved);
-      // Trigger global theme/bg sync on load
-      const themeBg = localStorage.getItem(`theme_bg_${saved}`);
-      const themeColor = localStorage.getItem(`theme_color_${saved}`);
-      if (themeBg) document.documentElement.style.setProperty('--custom-bg', `url(${themeBg})`);
-      if (themeColor) document.documentElement.style.setProperty('--primary-color', themeColor);
-    }
-    setLoading(false);
+    const hydrateSession = async () => {
+      const saved = localStorage.getItem("username");
+      if (saved) {
+        setUser(saved);
+        
+        // SESSION_HYDRATION_PROTOCOL: Proactively refresh token on load
+        try {
+          await api.post('/auth/refresh');
+          console.log("SESSION_HYDRATED_SUCCESSFULLY");
+        } catch (err) {
+          console.warn("SESSION_HYDRATION_FAILED // REDIRECTING_TO_IDENTITY_CORE");
+          // If refresh fails on boot, we should probably clear the user to be safe
+          localStorage.removeItem("username");
+          setUser(null);
+        }
+
+        // Trigger global theme/bg sync on load
+        const themeBg = localStorage.getItem(`theme_bg_${saved}`);
+        const themeColor = localStorage.getItem(`theme_color_${saved}`);
+        if (themeBg) document.documentElement.style.setProperty('--custom-bg', `url(${themeBg})`);
+        if (themeColor) {
+          document.documentElement.style.setProperty('--primary-color', themeColor);
+          // Sync HSL for components using hsl(var(--primary-hsl))
+          import('@/utils/color').then(({ hexToHSL }) => {
+            const hsl = hexToHSL(themeColor);
+            if (hsl) {
+              document.documentElement.style.setProperty('--primary-hsl', `${hsl.h} ${hsl.s}% ${hsl.l}%`);
+            }
+          });
+        }
+      }
+      setLoading(false);
+    };
+
+    hydrateSession();
   }, []);
 
   const login = (username: string): void => {

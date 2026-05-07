@@ -5,7 +5,7 @@
 import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
-  dsn: "https://416fe1b884c594d5fbbce0597cf913f3@o4511279964618752.ingest.us.sentry.io/4511279968485376",
+  dsn: "https://03aac11f903162caf4cd87f3447dca86@o4511313609359360.ingest.us.sentry.io/4511313610473472",
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: 1,
@@ -17,3 +17,9 @@ Sentry.init({
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: true,
 });
+
+// Example metrics from the tutorial
+Sentry.metrics.count("user_action", 1);
+Sentry.metrics.distribution("api_response_time", 150);
+Sentry.metrics.count("test_metric", 1);
+

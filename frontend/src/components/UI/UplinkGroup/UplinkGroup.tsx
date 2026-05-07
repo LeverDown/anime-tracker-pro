@@ -30,15 +30,15 @@ const UplinkGroup: React.FC<UplinkGroupProps> = ({ links }) => {
         <div className={styles.glitchBox} />
         <span className={styles.title}>PLATFORM UPLINKS // SECTORS</span>
       </div>
-      
+
       <div className={styles.grid}>
         {links.map((link, idx) => {
           const siteName = link.site.toUpperCase();
           const brandColor = BRAND_COLORS[siteName] || link.color || 'var(--primary-color)';
-          
+
           return (
             <motion.a
-              key={link.url}
+              key={`${link.url}-${idx}`}
               href={link.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -47,7 +47,7 @@ const UplinkGroup: React.FC<UplinkGroupProps> = ({ links }) => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: idx * 0.05 }}
               whileHover={{ scale: 1.02, x: 5 }}
-              style={{ 
+              style={{
                 '--platform-glow': brandColor,
                 '--platform-hsl': hexToHSLString(brandColor)
               } as any}
@@ -60,7 +60,7 @@ const UplinkGroup: React.FC<UplinkGroupProps> = ({ links }) => {
                 <span className={styles.typeTag}>{link.type}</span>
               </div>
               <ExternalLink size={14} className={styles.externalIcon} />
-              
+
               {/* HUD Scanline Effect on hover */}
               <div className={styles.scanline} />
             </motion.a>

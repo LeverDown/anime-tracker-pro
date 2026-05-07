@@ -1,16 +1,22 @@
 "use client";
 import React, { useState, useEffect, useContext, JSX, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Activity } from 'lucide-react';
 import { 
   PlayCircle, CheckCircle, Clock, 
   XCircle, Search, ChevronRight,
   TrendingUp, BarChart3, Filter,
-  Layers, ChevronUp, ChevronDown, Dices, Trash2
+  Layers, ChevronUp, ChevronDown, 
+  Dices, Trash2
 } from 'lucide-react';
+
+
 import { AuthContext } from '../AuthContext';
-import api from '../../api/client';
 import { useRouter } from 'next/navigation';
-import { Button, MediaCard, Input } from '../../components/UI';
+import { useUserCollection, useUpdateProgress, useUpdateScore, useDeleteFromCollection, userKeys } from '@/hooks/queries/useUser';
+import { useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/axios';
+import { Button, MediaCard, Input, Card } from '../../components/UI';
 import styles from './collection.module.css';
 
 /* eslint-disable @next/next/no-img-element */
@@ -20,8 +26,8 @@ interface CollectionItem {
   title: string;
   image_url: string;
   status: string;
-  score: number;
-  episodes: number;
+  score: number | null;
+  episodes: number | null;
   progress: number;
   genres: string;
   series_name?: string;
@@ -46,10 +52,11 @@ export default function CollectionPage(): JSX.Element {
   const router = useRouter();
   
   const [mounted, setMounted] = useState<boolean>(false);
-  const [collection, setCollection] = useState<CollectionItem[]>([]);
   const [activeTab, setActiveTab] = useState<string>('Watching');
-  const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>('');
+  const { data: collectionData, isPending: loading } = useUserCollection(user);
+  const collection = collectionData || [];
+  const queryClient = useQueryClient();
   const [expandedStack, setExpandedStack] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [genreFilter, setGenreFilter] = useState<string>('ALL');
@@ -60,52 +67,61 @@ export default function CollectionPage(): JSX.Element {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!user || !mounted) return;
-    
-    setLoading(true);
-    api.get('/collection', { params: { username: user } })
-      .then(r => {
-        setCollection(r.data.data || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [user, mounted]);
+  const { mutate: updateProgress } = useUpdateProgress();
+  const { mutate: updateScore } = useUpdateScore();
+  const { mutate: deleteAnime } = useDeleteFromCollection();
 
-  const handleProgressUpdate = async (animeId: number, newProgress: number) => {
+  const handleScoreUpdate = (animeId: number, newScore: number) => {
+    if (!user) return;
+    updateScore({
+      username: user,
+      anime_id: animeId,
+      score: newScore
+    });
+  };
+
+  const handleProgressUpdate = (animeId: number, newProgress: number) => {
+    if (!user) return;
     const item = collection.find(i => i.anime_id === animeId);
     if (!item) return;
 
-    // Optimistic Update
-    setCollection(prev => prev.map(i => i.anime_id === animeId ? { ...i, progress: newProgress } : i));
-
-    try {
-      await api.post('/collection/progress', {
-        username: user,
-        anime_id: animeId,
-        episode_progress: newProgress,
-        seasons_json: item.seasons_json // Keep existing seasons_json
-      });
-    } catch (err) {
-      console.error("Failed to update progress:", err);
-      // Rollback on error? Maybe not needed for a slider.
-    }
+    updateProgress({
+      username: user,
+      anime_id: animeId,
+      episode_progress: newProgress,
+      seasons_json: item.seasons_json
+    });
   };
   
-  const handleDelete = async (animeId: number) => {
+  const handleDelete = (animeId: number) => {
     if (!user) return;
     if (!window.confirm("PROTOCOL_WARNING // ARE YOU SURE YOU WANT TO PURGE THIS INTEL FROM THE ARCHIVE?")) return;
 
-    try {
-      await api.delete('/collection', { params: { username: user, anime_id: animeId } });
-      setCollection(prev => prev.filter(i => i.anime_id !== animeId));
-      if (expandedStack) {
-        // If the last item in a stack was deleted, close it
-        const remainingInStack = collection.filter(i => i.anime_id !== animeId && i.series_name === expandedStack);
-        if (remainingInStack.length <= 1) setExpandedStack(null);
+    deleteAnime({ username: user, animeId }, {
+      onSuccess: () => {
+        if (expandedStack) {
+          const remainingInStack = collection.filter(i => i.anime_id !== animeId && i.series_name === expandedStack);
+          if (remainingInStack.length <= 1) setExpandedStack(null);
+        }
       }
+    });
+  };
+
+  const handleSync = async () => {
+    if (!user) return;
+    setImporting(true);
+    try {
+      const res = await api.post(`/sync/anilist?username=${user}`);
+      alert(res.data.message || "Sync Initiated");
+      // Poll or wait? Let's just invalidate for now
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: userKeys.all() });
+      }, 3000);
     } catch (err) {
-      console.error("Failed to delete anime:", err);
+      console.error("Sync failed:", err);
+      alert("Sync failed. Ensure your username matches your AniList account.");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -122,9 +138,8 @@ export default function CollectionPage(): JSX.Element {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       alert(res.data.message || "Import Successful");
-      // Refresh collection
-      const r = await api.get('/collection', { params: { username: user } });
-      setCollection(r.data.data || []);
+      // Refresh collection via TanStack Query
+      queryClient.invalidateQueries({ queryKey: userKeys.collection(user, "All") });
     } catch (err) {
       console.error("Import failed:", err);
       alert("Import failed. Ensure file is valid MAL XML.");
@@ -150,59 +165,43 @@ export default function CollectionPage(): JSX.Element {
     const filtered = collection
       .filter(item => item.status?.toLowerCase() === activeTab?.toLowerCase())
       .filter(item => item.title.toLowerCase().includes(search.toLowerCase()))
-      .filter(item => genreFilter === 'ALL' || item.genres?.toLowerCase().includes(genreFilter.toLowerCase()));
+      .filter(item => genreFilter === 'ALL' || (item.genres && item.genres.toLowerCase().includes(genreFilter.toLowerCase())));
 
-    const ALIAS_MAP: Record<string, string> = {
-      'SHINGEKI NO KYOJIN': 'ATTACK ON TITAN', // User specifically mentioned this
-      'ATTACK ON TITAN': 'ATTACK ON TITAN',
-      'KIMETSU NO YAIBA': 'DEMON SLAYER',
-      'DEMON SLAYER': 'DEMON SLAYER',
-      'BOKU NO HERO ACADEMIA': 'MY HERO ACADEMIA',
-      'MY HERO ACADEMIA': 'MY HERO ACADEMIA',
-      'JUJUTSU KAISEN': 'JUJUTSU KAISEN',
-      'ONE PUNCH MAN': 'ONE PUNCH MAN',
-      'NANATSU NO TAIZAI': 'THE SEVEN DEADLY SINS',
-      'THE SEVEN DEADLY SINS': 'THE SEVEN DEADLY SINS',
-      'SHIGATSU WA KIMI NO USO': 'YOUR LIE IN APRIL',
-      'YOUR LIE IN APRIL': 'YOUR LIE IN APRIL',
-      'KOE NO KATACHI': 'A SILENT VOICE',
-      'A SILENT VOICE': 'A SILENT VOICE',
-      'KIMI NO NA WA.': 'YOUR NAME.',
-      'YOUR NAME.': 'YOUR NAME.',
-      'RE:ZERO KARA HAJIMERU ISEKAI SEIKATSU': 'RE:ZERO',
-      'RE:ZERO': 'RE:ZERO',
-    };
+    const ALIAS_MAP: Record<string, string> = {};
 
     return filtered.reduce((acc: Record<string, CollectionItem[]>, item) => {
-      let key = item.series_name;
+      let key = item.series_name && item.series_name !== item.title ? item.series_name : '';
       if (!key) {
-        // Advanced splitting: handles "2nd Season", "Part 2", "Movie", etc.
-        const cleanTitle = item.title.toUpperCase()
-          .replace(/\s+SEASON\s+\d+/g, '')
-          .replace(/\s+\d+(ST|ND|RD|TH)?\s+SEASON/g, '')
-          .replace(/\s+PART\s+\d+/g, '')
-          .replace(/\s+STAGE/g, '')
-          .replace(/\s+ARC/g, '')
-          .replace(/\s+MOVIE/g, '')
-          .replace(/\s+OAD/g, '')
-          .replace(/\s+OVA/g, '')
-          .replace(/\s+SPECIALS?/g, '');
+        // System-Wide Cleaning Engine: Recursive normalization
+        let clean = item.title.toUpperCase();
         
-        const titleParts = cleanTitle.split(/[:\-(]/);
-        key = titleParts[0].trim();
+        // 1. Pre-split cleaning (remove common meta-tags)
+        clean = clean
+          .replace(/\s*\([^)]*\)/g, '') // Remove (TV), (Movie), (2024), etc.
+          .replace(/\s*\[[^\]]*\]/g, '') // Remove [1080p], etc.
+          .replace(/\s+(COUR|PHASE|ACT|VOLUME|VOL|CHAPTER|CH|SEASON|PART|STAGE|ARC)\s+([IVXLCDM]+|\d+)/g, '')
+          .replace(/\s+\d+(ST|ND|RD|TH)?\s+SEASON/g, '');
+        
+        // 2. Split on primary separators (colon, dash-with-spaces, parens)
+        const titleParts = clean.split(/[:–—(]|\s+-\s+/);
+        let base = titleParts[0].trim();
 
-        // Check for aliases
-        if (ALIAS_MAP[key]) {
-          key = ALIAS_MAP[key];
+        // 3. Recursive trailing identifier removal (Digits and Roman Numerals)
+        // This handles "Mob Psycho 100 II" -> "Mob Psycho 100" -> "Mob Psycho"
+        const idRegex = /\s+([IVXLCDM]+|\d+|[A-Z])$/;
+        while (idRegex.test(base)) {
+          base = base.replace(idRegex, '').trim();
         }
 
-        // Hardcoded group overrides
-        if (key.includes("JOJO")) key = "JOJO'S BIZARRE ADVENTURE";
-        else if (key.includes("FATE/")) key = "FATE FRANCHISE";
-        else if (key.includes("MONOGATARI")) key = "MONOGATARI SERIES";
-        else if (key.includes("HIGH SCHOOL DXD")) key = "HIGH SCHOOL DXD";
-        else if (key.includes("SWORD ART ONLINE")) key = "SWORD ART ONLINE";
-        else if (key.includes("GIRLS UND PANZER")) key = "GIRLS UND PANZER";
+        key = base || item.title.toUpperCase();
+
+        // 4. Global Alias Normalization
+        if (ALIAS_MAP[key]) key = ALIAS_MAP[key];
+      }
+
+      // BUG-004: Fallback for empty or invalid keys to prevent React key collision
+      if (!key) {
+        key = item.title.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim() || `ID-${item.anime_id}`;
       }
 
       if (!acc[key]) acc[key] = [];
@@ -300,11 +299,21 @@ export default function CollectionPage(): JSX.Element {
             <Button 
               variant="tactical" 
               size="sm"
+              onClick={handleSync} 
+              icon={<Activity size={14} />}
+              disabled={importing}
+              glow
+            >
+              {importing ? 'SYNCING...' : 'SYNC'}
+            </Button>
+            <Button 
+              variant="tactical" 
+              size="sm"
               onClick={() => fileInputRef.current?.click()} 
               icon={<TrendingUp size={14} />}
               disabled={importing}
             >
-              {importing ? 'SYNCING...' : 'IMPORT'}
+              IMPORT
             </Button>
             <Button 
               variant="tactical" 
@@ -446,14 +455,32 @@ export default function CollectionPage(): JSX.Element {
 
                     {activeTab !== 'Plan to Watch' && items.length === 1 && (
                       <div className={styles.sliderContainer} onClick={(e) => e.stopPropagation()}>
-                        <input 
-                          type="range" 
-                          min="0" 
-                          max={latest.episodes || 12} 
-                          value={latest.progress}
-                          onChange={(e) => handleProgressUpdate(latest.anime_id, parseInt(e.target.value))}
-                          className={styles.episodeSlider}
-                        />
+                        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>PROGRESS</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>SCORE</span>
+                              <select
+                                value={latest.score || 0}
+                                onChange={(e) => handleScoreUpdate(latest.anime_id, parseFloat(e.target.value))}
+                                className={styles.scoreSelect}
+                              >
+                                <option value={0}>-</option>
+                                {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                  <option key={n} value={n}>{n}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <input 
+                            type="range" 
+                            min="0" 
+                            max={latest.episodes || 12} 
+                            value={latest.progress}
+                            onChange={(e) => handleProgressUpdate(latest.anime_id, parseInt(e.target.value))}
+                            className={styles.episodeSlider}
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -488,15 +515,28 @@ export default function CollectionPage(): JSX.Element {
                                 {activeTab === 'Completed' ? item.episodes : item.progress}/{item.episodes || '?'}
                               </span>
                             </div>
-                            <button 
-                              className={styles.purgeSeason}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(item.anime_id);
-                              }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <select
+                                value={item.score || 0}
+                                onChange={(e) => { e.stopPropagation(); handleScoreUpdate(item.anime_id, parseFloat(e.target.value)); }}
+                                className={styles.scoreSelect}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <option value={0}>-</option>
+                                {[1,2,3,4,5,6,7,8,9,10].map(n => (
+                                  <option key={n} value={n}>{n}</option>
+                                ))}
+                              </select>
+                              <button 
+                                className={styles.purgeSeason}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDelete(item.anime_id);
+                                }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </motion.div>

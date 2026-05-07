@@ -1,8 +1,9 @@
 "use client";
-import React, { useState, useEffect, useContext, useRef, JSX, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useRef, JSX, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import api from '../../../api/client';
+import { useAnimeDetails, useSmartRelations } from '@/hooks/queries/useAnime';
+import { useSaveToCollection } from '@/hooks/queries/useUser';
 import UplinkGroup from '../../../components/UI/UplinkGroup/UplinkGroup';
 import SeasonalTimeline from '../../../components/UI/SeasonalTimeline/SeasonalTimeline';
 import { AuthContext } from '../../AuthContext';
@@ -95,77 +96,57 @@ export default function AnimeDetailPage(): JSX.Element {
   const user = auth?.user;
 
   const [mounted, setMounted] = useState<boolean>(false);
-  const [anime, setAnime] = useState<Anime | null>(null);
-  const [smartRelations, setSmartRelations] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [saveStatus, setSaveStatus] = useState<string>('');
-  const [toast, setToast] = useState<string>('');
-
+  
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  const fetchDetails = useCallback(async (targetId: string): Promise<void> => {
-    setLoading(true);
-    try {
-      const response = await api.get(`/anime/details/${targetId}`);
-      if (response.data && response.data.data) {
-        setAnime(response.data.data);
+  const { data: animeData, isPending, isError } = useAnimeDetails(Number(id));
+  const anime = animeData?.data as Anime | null;
 
-        // Async fetch relations via internal API if not already in data
-        if (!response.data.data.relations || response.data.data.relations.length === 0) {
-          api.get('/anime/relations/smart', { params: { idMal: targetId } })
-             .then(r => setSmartRelations(r.data.data || []))
-             .catch(() => setSmartRelations([]));
-        } else {
-          const rels = response.data.data.relations.flatMap((r: any) =>
-            r.entry.map((e: any) => ({ ...e, relation: r.relation }))
-          );
-          setSmartRelations(rels);
-        }
-      } else {
-        setAnime(null);
-      }
-    } catch (err) {
-      console.error("Anime fetch error", err);
-      setAnime(null);
-    } finally {
-      setLoading(false);
+  const { data: smartRelationsData } = useSmartRelations(Number(id));
+  
+  // Combine internal relations and smart relations
+  const smartRelations = useMemo(() => {
+    if (!anime) return [];
+    if (anime.relations && anime.relations.length > 0) {
+      return anime.relations.flatMap((r: any) =>
+        r.entry.map((e: any) => ({ ...e, relation: r.relation }))
+      );
     }
-  }, []);
+    return smartRelationsData || [];
+  }, [anime, smartRelationsData]);
 
-  useEffect(() => {
-    if (id) fetchDetails(id as string);
-  }, [id, fetchDetails]);
+  const [saveStatus, setSaveStatus] = useState<string>('');
+  const [toast, setToast] = useState<string>('');
+
+  const { mutate: saveToCollection } = useSaveToCollection();
 
   const showToast = (msg: string): void => {
     setToast(msg);
     setTimeout(() => setToast(''), 3500);
   };
 
-  const handleSave = async (): Promise<void> => {
+  const handleSave = (): void => {
     if (!user || !saveStatus || !anime) return;
-    try {
-      await api.post('/collection', {
-        username: user,
-        anime_id: anime.mal_id,
-        title: anime.title,
-        image_url: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-        status: saveStatus,
-        score: anime.score || 0,
-        episodes: anime.episodes || 0,
-        genres: anime.genres?.map(g => g.name).join(', ') || '',
-        idMal: anime.mal_id,
-      });
-      showToast(`✅ [LOGGED] ${anime.title_english || anime.title} saved to ARCHIVE.`);
-    } catch (err) {
-      console.error("Save error", err);
-      showToast("❌ Failed to sync to Archive.");
-    }
+    saveToCollection({
+      username: user,
+      anime_id: anime.mal_id,
+      title: anime.title,
+      image_url: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+      status: saveStatus,
+      score: anime.score || 0,
+      episodes: anime.episodes || 0,
+      genres: anime.genres?.map(g => g.name).join(', ') || '',
+      idMal: anime.mal_id,
+    }, {
+      onSuccess: () => showToast(`✅ [LOGGED] ${anime.title_english || anime.title} saved to ARCHIVE.`),
+      onError: () => showToast("❌ Failed to sync to Archive.")
+    });
   };
 
   if (!mounted) return <div className={styles.loadingState} />;
-  if (loading) return <div className={styles.loadingState}>UPLINKING TO DATABASE...</div>;
+  if (isPending) return <div className={styles.loadingState}>UPLINKING TO DATABASE...</div>;
   if (!anime) return <div className={styles.errorState}>IDENTITY NOT FOUND.</div>;
 
   const characters = anime.characters?.slice(0, 8) || [];

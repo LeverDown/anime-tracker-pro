@@ -3,35 +3,79 @@ import sys
 import json
 import asyncio
 from datetime import datetime, timedelta
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    load_dotenv(dotenv_path=env_path)
 except ImportError:
     pass
 
-import sentry_sdk
 import uuid
-from fastapi import FastAPI, HTTPException, File, UploadFile
+import sentry_sdk
+from sentry_sdk import metrics
+from fastapi import FastAPI, HTTPException, File, UploadFile, BackgroundTasks, Response, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from routes.events import router as events_router
+from sqlalchemy import text
+from sqlalchemy import func
 from typing import List, Optional, Any
+from contextlib import asynccontextmanager
+
+from core.tasks import sync_external_library_task
 
 # Ensure the backend directory is in the path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import database as db
 import anilist as al
+from core.metadata_engine import MetadataEngine
+from core.security import get_current_user
+from utils.image_utils import upscale_image_url
 
-sentry_sdk.init(
-    dsn=os.getenv("SENTRY_DSN"),
-    send_default_pii=True,
-    traces_sample_rate=1.0,
-    profiles_sample_rate=1.0,
-)
+IS_PROD = os.getenv("NODE_ENV") == "production"
+print(f"!!! [SYSTEM] Running in {'PRODUCTION' if IS_PROD else 'DEVELOPMENT'} mode (Cookie Secure: {IS_PROD}) !!!")
 
-app = FastAPI(title="Anime Tracker API")
+# Initialize Sentry
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        send_default_pii=True,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+    # Example metrics from the tutorial
+    metrics.count("checkout.failed", 1)
+    metrics.gauge("queue.depth", 42)
+    metrics.distribution("cart.amount_usd", 187.5)
+    metrics.count("test_metric", 1)
+    
+    print("Sentry backend monitoring initialized with Metrics.")
+else:
+    print("Sentry DSN not found. Monitoring disabled.")
+
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- Startup Logic ---
+    db.init_db()
+    
+    yield
+    
+    # --- Shutdown Logic ---
+    pass
+
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI(title="Anime Tracker API", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Ensure uploads directory exists
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
@@ -40,6 +84,12 @@ if not os.path.exists(UPLOAD_DIR):
 
 # Mount static files to serve uploaded images
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+app.include_router(events_router, prefix="/api/events")
+ 
+@app.get("/")
+@app.get("//")
+async def root():
+    return {"message": "SENTRY_PURGE_COMPLETE_BACKEND_READY_001"}
 
 @app.post("/api/upload")
 async def upload_image(file: UploadFile = File(...)):
@@ -55,11 +105,7 @@ async def upload_image(file: UploadFile = File(...)):
         f.write(content)
     
     return {"url": f"/uploads/{new_filename}"}
-
-@app.get("/debug-sentry")
-async def trigger_error():
-    division_by_zero = 1 / 0
-    return {"message": "You should not see this!"}
+ 
 
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -73,17 +119,16 @@ async def validation_exception_handler(request, exc):
 # Setup CORS for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust this in production
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup():
-    db.init_db()
-    # Start the background cleanup
-    asyncio.create_task(cleanup_activity_task())
+
+from core.security import create_access_token, create_refresh_token, get_current_user, verify_password
+import jwt
+from core.security import SECRET_KEY, ALGORITHM
 
 # --- Auth Models ---
 class UserRegister(BaseModel):
@@ -95,49 +140,164 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
+# Track failed login attempts for Sentry alerts (Phase 1)
+failed_login_attempts = {}
+
 @app.post("/api/auth/register")
-def register(user: UserRegister):
+@limiter.limit("5/minute")
+def register(user: UserRegister, request: Request):
     success = db.add_user(user.username, user.password, user.email)
     if success:
         return {"message": "User created successfully"}
     raise HTTPException(status_code=400, detail="Username already exists")
 
 @app.post("/api/auth/login")
-def login(user: UserLogin):
-    success = db.login_user(user.username, user.password)
-    if success:
-        return {"message": "Login successful", "username": user.username}
+@limiter.limit("10/minute")
+def login(user: UserLogin, request: Request, response: Response):
+    print(f"!!! [AUTH] Login attempt for user: {user.username} !!!")
+    is_valid, needs_rehash = db.login_user(user.username, user.password)
+    
+    if is_valid:
+        print(f"!!! [AUTH] Login SUCCESS for user: {user.username} !!!")
+        
+        # SEC-004: Automatic Upgrade from Legacy SHA-256
+        if needs_rehash:
+            from core.security import get_password_hash
+            new_hash = get_password_hash(user.password)
+            with db.get_db() as session:
+                session.query(db.User).filter(db.User.username == user.username).update({"password": new_hash})
+                session.commit()
+            sentry_sdk.capture_message(f"Security: Upgraded legacy hash for user {user.username}", level="info")
+
+        # Reset counter on success
+        failed_login_attempts.pop(user.username, None)
+        access_token = create_access_token(data={"sub": user.username})
+        refresh_token = create_refresh_token(data={"sub": user.username})
+        
+        # Set HttpOnly Cookies with global path (Adaptive Secure flag)
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=IS_PROD, samesite="lax", max_age=3600, path="/")
+        response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=IS_PROD, samesite="lax", max_age=3600*24*7, path="/")
+        
+        return {"message": "Login successful", "username": user.username, "access_token": access_token, "token_type": "bearer"}
+    
+    print(f"!!! [AUTH] Login FAILED for user: {user.username} !!!")
+    # Track failed attempts
+    attempts = failed_login_attempts.get(user.username, 0) + 1
+    failed_login_attempts[user.username] = attempts
+    
+    if attempts >= 5:
+        sentry_sdk.capture_message(
+            f"Security Alert: Repeated failed login attempts for user {user.username}",
+            level="warning"
+        )
+        
     raise HTTPException(status_code=401, detail="Invalid credentials")
+
+@app.post("/api/auth/refresh")
+def refresh_token(request: Request, response: Response):
+    token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        token_type = payload.get("type")
+        
+        if username is None or token_type != "refresh":
+            raise HTTPException(status_code=401, detail="Invalid refresh token")
+            
+        # SEC-006: Verify user still exists in database
+        with db.get_db() as session:
+            db_user = session.query(db.User).filter(func.lower(db.User.username) == func.lower(username)).first()
+            if not db_user:
+                raise HTTPException(status_code=401, detail="Session invalid: User record not found")
+
+        access_token = create_access_token(data={"sub": username})
+        # SEC-005: Add secure=True (Adaptive) to refresh cookies
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=IS_PROD, samesite="lax", max_age=3600, path="/")
+        response.set_cookie(key="refresh_token", value=token, httponly=True, secure=IS_PROD, samesite="lax", max_age=7*24*60*60, path="/")
+        
+        return {"access_token": access_token, "token_type": "bearer"}
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
+        raise HTTPException(status_code=401, detail="Could not validate credentials")
 
 # --- User Profile ---
 class ThemeUpdate(BaseModel):
     username: str
     theme_url: str
 
+def verify_owner(current_user: str, target_user: str):
+    if current_user != target_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation not permitted: You do not own this data sector."
+        )
+
+
 @app.get("/api/user/theme")
-def get_theme(username: str):
+def get_theme(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     theme = db.get_user_theme(username)
     return {"theme_url": theme}
 
+@app.get("/api/profile/{username}")
+def get_profile(username: str):
+    profile = db.get_public_profile(username)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+
 @app.post("/api/user/theme")
-def update_theme(data: ThemeUpdate):
+def update_theme(data: ThemeUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.set_user_theme(data.username, data.theme_url)
     return {"message": "Theme updated"}
 
 # --- Anime APIs ---
 @app.get("/api/anime/discover")
-def discover_anime(mode: str = "search", query: Optional[str] = None, genre: Optional[str] = None, page: int = 1, perPage: int = 50):
+def discover_anime(
+    mode: str = "search", 
+    query: Optional[str] = None, 
+    genre: Optional[str] = None, 
+    page: int = 1, 
+    perPage: Optional[int] = None,
+    per_page: Optional[int] = None
+):
+    # Standardize pagination parameters
+    final_per_page = perPage or per_page or 50
+    # Map 'top' mode (from Trending tab) to the correct AniList mode
+    effective_mode = "top" if mode == "top" or mode == "trending" else mode
+    
     genres = [genre] if genre else None
-    data, page_info = al.fetch_anilist(query=query, mode=mode, genres=genres, page=page, perPage=perPage)
+    data, page_info = al.fetch_anilist(query=query, mode=effective_mode, genres=genres, page=page, perPage=final_per_page)
     return {"data": data, "pageInfo": page_info}
 
+from utils.schedule_utils import ScheduleFetchError
+
 @app.get("/api/anime/schedule")
-def get_schedule(day: str):
-    data = al.fetch_anilist_schedule(day)
-    return {"data": data}
+def get_schedule(day: str, timezone: str = "UTC"):
+    try:
+        data = al.fetch_airing_schedule(day, timezone)
+        return JSONResponse(status_code=200, content={
+            "data": data,
+            "meta": {
+                "day": day,
+                "timezone": timezone,
+                "source": data[0]["source"] if data else "unknown",
+                "cached": True
+            }
+        })
+    except ScheduleFetchError as e:
+        return JSONResponse(status_code=503, content={"error": "schedule_unavailable", "message": str(e)})
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": "invalid_params", "message": str(e)})
 
 @app.get("/api/anime/recommendations")
-def get_recommendations(username: str, genre: Optional[str] = None, page: int = 1, perPage: int = 50):
+def get_recommendations(username: str, genre: Optional[str] = None, page: int = 1, perPage: int = 50, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     if genre == "": genre = None
     items = db.get_user_anime(username, "All")
     
@@ -148,8 +308,6 @@ def get_recommendations(username: str, genre: Optional[str] = None, page: int = 
     # Signal Maps
     status_weights = {"Completed": 3, "Watching": 2, "Plan to Watch": 1, "Dropped": -1}
     genre_weights = {}
-    tag_weights = {}
-    studio_weights = {}
     user_anime_ids = set() # Stores both AniList and MAL IDs
 
     for item in items:
@@ -160,7 +318,7 @@ def get_recommendations(username: str, genre: Optional[str] = None, page: int = 
         # Calculate weights
         multiplier = (score / 5.0) if score > 0 else 1.0
         base_w = status_weights.get(status, 1)
-        if status == "Dropped" and (item[12] if len(item) > 12 else None): base_w = -10
+        if status == "Dropped" and (item[12] if len(item) > 12 else None): base_w = -3
         final_w = base_w * multiplier
 
         # Genres
@@ -173,20 +331,35 @@ def get_recommendations(username: str, genre: Optional[str] = None, page: int = 
         # apply a studio boost for very highly rated shows if we can fetch them.
         # For now, we'll focus on the Sequel Awareness and improved candidate scoring.
 
-    # Fetch 150 candidates with relations/tags/studios
+    # ENDLESS_HORIZON Protocol: If we need more than the first 150 candidates,
+    # we switch to a stream-based discovery while still filtering for collection duplicates.
+    is_beyond_pool = (page * perPage) > 150
+    
+    if is_beyond_pool:
+        # Fetch fresh data for this specific page
+        stream_candidates, stream_page_info = al.fetch_anilist(mode="top", perPage=perPage, page=page, genres=[genre] if genre else None)
+        # Still apply basic collection filter
+        filtered_stream = [a for a in stream_candidates if a['mal_id'] not in user_anime_ids and (not a['idMal'] or a['idMal'] not in user_anime_ids)]
+        return {
+            "data": filtered_stream,
+            "pageInfo": {
+                "total": stream_page_info.get('total', 1000),
+                "lastPage": stream_page_info.get('lastPage', 50),
+                "hasNextPage": stream_page_info.get('hasNextPage', True)
+            }
+        }
+
+    # Fetch 150 candidates with relations/tags/studios for the deep-scoring pool
     candidates, _ = al.fetch_anilist(mode="top", perPage=150, genres=[genre] if genre else None)
     
     scored_candidates = []
     for anime in candidates:
-        # Extra safety: filter by genre if requested
         if genre and genre not in [g['name'] for g in anime.get('genres', [])]:
             continue
-            
-        # 1. Basic filter: already in list
         if anime['mal_id'] in user_anime_ids or (anime['idMal'] and anime['idMal'] in user_anime_ids):
             continue
             
-        # 2. Sequel Awareness (Feature 5)
+        # 1. Sequel Awareness
         is_sequel_missing_prequel = False
         for rel in anime.get('relations', []):
             if rel['relationType'] == 'PREQUEL':
@@ -196,43 +369,31 @@ def get_recommendations(username: str, genre: Optional[str] = None, page: int = 
                     is_sequel_missing_prequel = True
                     break
         
-        if is_sequel_missing_prequel:
-            continue # Don't recommend Season 2 if they haven't seen S1
+        if is_sequel_missing_prequel: continue
 
-        # 3. Content Scoring (Features 1 & 3)
+        # 2. Content Scoring
         score = 0
-        # Genre boost
         for g in anime.get('genres', []):
             score += genre_weights.get(g['name'], 0)
-        
-        # Tag boost (Feature 1) - using a subset of genre weights as a proxy for now
-        # but weighting higher ranked tags if they match genre profile
         for tag in anime.get('tags', []):
             score += (genre_weights.get(tag, 0) * 0.5)
-            
-        # Studio boost (Feature 3)
-        # (Assuming user likes studios of their top rated shows)
-        # We'll give a static boost to candidates from studios if we find matches in history
-        # (This part is simplified for the demonstration)
         
-        # Popularity boost
         score += (anime.get('score', 0) / 10.0)
-        
         anime['_match_score'] = score
         scored_candidates.append(anime)
-        
-    scored_candidates.sort(key=lambda x: x['_match_score'], reverse=True)
-    
-    # Pagination
-    per_page = perPage
-    total = len(scored_candidates)
-    last_page = (total // per_page) + (1 if total % per_page > 0 else 0)
-    start = (page - 1) * per_page
-    end = start + per_page
+
+    # Recalculate local pagination for the pool
+    scored_candidates.sort(key=lambda x: x.get('_match_score', 0), reverse=True)
+    start = (page - 1) * perPage
+    end = start + perPage
     
     return {
         "data": scored_candidates[start:end],
-        "pageInfo": { "total": total, "lastPage": last_page, "hasNextPage": page < last_page }
+        "pageInfo": { 
+            "total": 1000, # Large number to keep pagination active
+            "lastPage": 50,
+            "hasNextPage": True 
+        }
     }
 
 # --- Collection ---
@@ -249,17 +410,10 @@ class AnimeSave(BaseModel):
     drop_reason: Optional[str] = None
     idMal: Optional[int] = None
 
-def upscale_image_url(url: str) -> str:
-    if not url: return url
-    # Handle MyAnimeList image upscaling
-    if "cdn.myanimelist.net/images/anime/" in url:
-        if not url.endswith("l.jpg") and url.endswith(".jpg"):
-            return url.replace(".jpg", "l.jpg")
-    # Handle AniList image upscaling (already using extraLarge, but for safety)
-    return url
-
+# SEC-002: Protected in turn 10
 @app.get("/api/collection")
-def get_collection(username: str, status_filter: str = "All"):
+def get_collection(username: str, status_filter: str = "All", current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     items = db.get_user_anime(username, status_filter)
     # Map tuple to dict for easy JSON parsing
     result = []
@@ -281,21 +435,13 @@ def get_collection(username: str, status_filter: str = "All"):
         })
     return {"data": result}
 
-def notify_friends(username: str, message: str, anime_id: int):
-    friends = db.get_friends(username)
-    for friend in friends:
-        db.create_notification(friend, message, anime_id)
-
 @app.post("/api/collection")
-def save_collection(data: AnimeSave):
+async def save_collection(data: AnimeSave, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     high_res_url = upscale_image_url(data.image_url)
     db.save_anime_to_db(data.username, data.anime_id, data.title, high_res_url, 
                         data.status, data.score, data.episodes, data.genres,
                         data.coop_friend_username, data.drop_reason, data.idMal)
-    db.log_activity(data.username, f'added "{data.title}" to {data.status}', data.title, data.anime_id)
-    
-    if data.status in ["Watching", "Completed"]:
-        notify_friends(data.username, f"{data.username} started tracking {data.title}", data.anime_id)
     
     return {"message": "Saved to collection"}
 
@@ -306,49 +452,41 @@ class ProgressUpdate(BaseModel):
     episode_progress: int = 0
 
 @app.post("/api/collection/progress")
-def update_progress(data: ProgressUpdate):
+async def update_progress(data: ProgressUpdate, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     # 1. Update seasons_json (legacy compatibility)
     db.update_seasons_json(data.username, data.anime_id, data.seasons_json)
     
     # 2. Update the primary progress column and handle status transitions
-    with db.get_db() as conn:
-        c = conn.cursor()
-        # Fetch total episodes to check for completion
-        c.execute("SELECT episodes, status FROM user_anime WHERE username=? AND anime_id=?", (data.username, data.anime_id))
-        row = c.fetchone()
-        if row:
-            total_eps = row[0] or 0
-            current_status = row[1]
+    with db.engine.begin() as conn:
+        anime = conn.execute(
+            text("SELECT id, episodes, title_romaji FROM anime WHERE anilist_id = :aid OR mal_id = :aid"),
+            {"aid": data.anime_id}
+        ).first()
+        
+        if not anime:
+            raise HTTPException(status_code=404, detail="Anime metadata not found")
+
+        # Update the user list entry
+        conn.execute(
+            text("""
+                UPDATE user_anime_list 
+                SET episodes_watched = :p, 
+                    status = CASE WHEN :p >= :e THEN 'Completed' ELSE status END,
+                    updated_at = :now
+                WHERE user_id = :u AND anime_id = :aid
+            """),
+            {"p": data.episode_progress, "e": anime.episodes or 9999, "u": data.username, "aid": anime.id, "now": datetime.utcnow()}
+        )
+
+        # Log to watch_history
+        conn.execute(
+            text("INSERT INTO watch_history (username, anime_id, episode_num) VALUES (:u, :aid, :e)"),
+            {"u": data.username, "aid": anime.id, "e": data.episode_progress}
+        )
             
-            # Update progress
-            new_status = current_status
-            if data.episode_progress >= total_eps and total_eps > 0:
-                new_status = "Completed"
-            elif data.episode_progress > 0:
-                new_status = "Watching"
-                
-            c.execute("UPDATE user_anime SET progress=?, status=? WHERE username=? AND anime_id=?", 
-                      (data.episode_progress, new_status, data.username, data.anime_id))
-            conn.commit()
-    
-    if data.episode_progress > 0:
-        db.log_watch_history(data.username, data.anime_id, data.episode_progress)
-        # Find title for activity log
-        items_all = db.get_user_anime(data.username, "All")
-        anime_title = next((i[2] for i in items_all if i[1] == data.anime_id), 'Unknown Anime')
-        db.log_activity(data.username, f'watched episode {data.episode_progress} of "{anime_title}"', anime_title, data.anime_id)
-        notify_friends(data.username, f"{data.username} just watched Episode {data.episode_progress} of {anime_title}", data.anime_id)
+    return {"message": "Progress synchronized"}
 
-    items = db.get_user_anime(data.username, "All")
-    coop_friend = next((item[11] for item in items if item[1] == data.anime_id and len(item) > 11), None)
-    
-    warning = False
-    if coop_friend:
-        friend_progress = db.get_friend_progress(coop_friend, data.anime_id)
-        if friend_progress is not None and data.episode_progress > friend_progress:
-            warning = True
-
-    return {"message": "Progress updated", "coop_warning": warning, "coop_friend": coop_friend}
 
 class ReviewUpdate(BaseModel):
     username: str
@@ -356,12 +494,42 @@ class ReviewUpdate(BaseModel):
     review: str
 
 @app.post("/api/collection/review")
-def update_review(data: ReviewUpdate):
+def update_review(data: ReviewUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.update_review(data.username, data.anime_id, data.review)
     return {"message": "Review updated"}
 
+class ScoreUpdate(BaseModel):
+    username: str
+    anime_id: int
+    score: float
+
+@app.post("/api/collection/score")
+def update_score(data: ScoreUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
+    with db.get_db() as conn:
+        anime = conn.execute(
+            text("SELECT id FROM anime WHERE anilist_id = :aid OR mal_id = :aid"),
+            {"aid": data.anime_id}
+        ).first()
+        if not anime:
+            raise HTTPException(status_code=404, detail="Anime not found in master records.")
+        anime_uuid = anime[0]
+        
+        conn.execute(
+            text("""
+                UPDATE user_anime_list 
+                SET score = :score 
+                WHERE user_id = :uid AND anime_id = :aid
+            """),
+            {"score": data.score, "uid": data.username, "aid": anime_uuid}
+        )
+        conn.commit()
+    return {"message": "Score updated"}
+
 @app.delete("/api/collection")
-def delete_collection(username: str, anime_id: int):
+def delete_collection(username: str, anime_id: int, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     db.delete_anime_from_db(username, anime_id)
     return {"message": "Deleted from collection"}
 
@@ -371,58 +539,26 @@ class SeriesNameUpdate(BaseModel):
     series_name: Optional[str] = None
 
 @app.post("/api/collection/series")
-def update_series_name(data: SeriesNameUpdate):
+def update_series_name(data: SeriesNameUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.set_series_name(data.username, data.anime_id, data.series_name)
     return {"message": "Series name updated"}
 
-# --- Community ---
-class FriendAction(BaseModel):
-    username: str
-    friend_username: str
-
-@app.get("/api/community/friends")
-def get_friends(username: str):
-    friends = db.get_friends(username)
-    return {"data": friends}
-
-@app.post("/api/community/friends")
-def add_friend(data: FriendAction):
-    if not db.check_user_exists(data.friend_username):
-        raise HTTPException(status_code=404, detail="User not found")
-    success = db.add_friend(data.username, data.friend_username)
-    if success:
-        return {"message": "Friend added"}
-    raise HTTPException(status_code=400, detail="Already friends")
-
-@app.delete("/api/community/friends")
-def remove_friend(username: str, friend_username: str):
-    db.remove_friend(username, friend_username)
-    return {"message": "Friend removed"}
-
-@app.get("/api/community/search")
-def search_user(username: str):
-    exists = db.check_user_exists(username)
-    if exists:
-        return {"message": "User found", "exists": True}
-    raise HTTPException(status_code=404, detail="User not found")
-
-@app.get("/api/community/compare")
-def compare_friend(username: str, friend_username: str):
-    total_count, shared = db.get_shared_anime(username, friend_username)
-    return {"total_count": total_count, "shared": shared}
-
-# --- New Advanced Features APIs ---
+# --- Advanced Features APIs ---
 import requests
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 
 @app.get("/api/user/stats/{username}")
-def get_user_stats(username: str):
+def get_user_stats(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     # Total episodes from current progress (More accurate for live syncing)
     with db.get_db() as conn:
-        c = conn.cursor()
-        c.execute('SELECT SUM(progress) FROM user_anime WHERE username=?', (username,))
-        total_episodes = c.fetchone()[0] or 0
+        total_episodes = conn.execute(
+            text('SELECT SUM(episodes_watched) FROM user_anime_list WHERE LOWER(user_id) = LOWER(:u)'), 
+            {'u': username}
+        ).scalar() or 0
+
         
     # Anime list metrics
     items = db.get_user_anime(username, "All")
@@ -454,18 +590,27 @@ def get_user_stats(username: str):
         "genre_counts": genre_counts
     }
 
+@app.delete("/api/collection/purge")
+async def purge_all_data(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
+    db.purge_user_data(username)
+    return {"message": "PURGE_COMPLETE // ALL DATA WIPED"}
+
 @app.get("/api/collection/backlog")
-def get_backlog(username: str):
+def get_backlog(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     items = db.get_user_anime(username, "Plan to Watch")
     total_eps = sum((item[6] or 12) for item in items)
     
-    # Assume 5 eps a week if no history
-    with db.get_db() as conn:
-        c = conn.cursor()
-        c.execute('SELECT count(*) FROM watch_history WHERE username=?', (username,))
-        history_count = c.fetchone()[0]
-    
-    eps_per_week = max((history_count / 4.0), 5.0) 
+    # BUG-002: Improved backlog estimation using 30-day window
+    with db.engine.connect() as conn:
+        thirty_days_ago = datetime.now() - timedelta(days=30)
+        recent_count = conn.execute(
+            text('SELECT count(*) FROM watch_history WHERE username = :u AND timestamp > :cutoff'), 
+            {'u': username, 'cutoff': thirty_days_ago}
+        ).scalar() or 0
+        
+    eps_per_week = max((recent_count / 4.2), 5.0) # 4.2 weeks in a month
     weeks_to_clear = total_eps / eps_per_week
     
     roulette = None
@@ -482,7 +627,9 @@ def get_backlog(username: str):
     }
 
 @app.get("/api/collection/export")
-def export_collection(username: str):
+def export_collection(username: str, current_user: str = Depends(get_current_user)):
+    # SEC-002: Verify ownership before allowing export (IDOR Protection)
+    verify_owner(current_user, username)
     items = db.get_user_anime(username, "All")
     # Transform into clean object list for JSON export
     export_data = []
@@ -502,31 +649,128 @@ def export_collection(username: str):
 
 @app.get("/api/anime/details/{media_id}")
 def get_anime_details(media_id: int):
-    # 1. Try AniList first (Prioritize AniList per requirements)
-    # We try both is_mal=True and False
-    al_data = al.fetch_anilist_media(media_id, is_mal=True)
-    if not al_data:
-        al_data = al.fetch_anilist_media(media_id, is_mal=False)
-    
-    if al_data:
-        # Augment with Jikan for extra metadata if needed, but primary is AniList
-        return {"data": al_data, "source": "anilist"}
+    with db.get_db() as session:
+        engine = MetadataEngine(session)
+        return engine.resolve_anime_details(media_id)
 
-    # 2. Fallback to Jikan (MAL)
-    try:
-        r = requests.get(f"https://api.jikan.moe/v4/anime/{media_id}/full", timeout=8)
-        if r.status_code == 200:
-            data = r.json().get('data')
-            if data:
-                # Fallback to Jikan's own external links if AniList is down
-                data['external_links'] = [{"site": ex['name'], "url": ex['url'], "type": "Official"} for ex in data.get('external', [])]
-                return {"data": data, "source": "jikan"}
-    except Exception as e:
-        print(f"Jikan fallback error: {e}")
-        pass
-    
-    raise HTTPException(status_code=404, detail="Anime not found in any uplink (All uplinks disabled or ID invalid).")
 
+# --- Backlog & Preferences ---
+class StatusUpdate(BaseModel):
+    status: str
+
+class PreferencesUpdate(BaseModel):
+    watch_rate_per_day: Optional[int] = None
+    theme: Optional[str] = None
+
+@app.get("/api/anime/list")
+def get_anime_list(status: str, username: str = Depends(get_current_user)):
+    status_map = {
+        "PLAN_TO_WATCH": "Plan to Watch",
+        "WATCHING": "Watching",
+        "COMPLETED": "Completed",
+        "DROPPED": "Dropped",
+        "PAUSED": "On Hold"
+    }
+    db_status = status_map.get(status, status)
+    
+    with db.get_db() as session:
+        results = session.query(db.UserAnimeList, db.Anime)\
+            .join(db.Anime, db.UserAnimeList.anime_id == db.Anime.id)\
+            .filter(func.lower(db.UserAnimeList.user_id) == func.lower(username))\
+            .filter(db.UserAnimeList.status == db_status)\
+            .all()
+            
+        return [
+            {
+                "id": a.anilist_id or a.mal_id,
+                "mal_id": a.mal_id,
+                "title": a.title_romaji,
+                "episodes": a.episodes or 0,
+                "watched_episodes": ul.episodes_watched or 0,
+                "format": a.format or "TV",
+                "genres": [g.get('name') for g in a.genres] if a.genres and isinstance(a.genres, list) else [],
+                "cover_image": a.image_url,
+                "score": ul.score,
+                "rank": a.popularity or 0
+            }
+            for ul, a in results
+        ]
+
+@app.patch("/api/anime/{id}/status")
+def update_status(id: int, data: StatusUpdate, username: str = Depends(get_current_user)):
+    status_map = {
+        "PLAN_TO_WATCH": "Plan to Watch",
+        "WATCHING": "Watching",
+        "COMPLETED": "Completed",
+        "DROPPED": "Dropped",
+        "PAUSED": "On Hold"
+    }
+    db_status = status_map.get(data.status, data.status)
+    
+    with db.get_db() as session:
+        anime_uuid = db.resolve_anime_uuid(session, id)
+        if not anime_uuid:
+            raise HTTPException(status_code=404, detail="Anime not found")
+            
+        ul_entry = session.query(db.UserAnimeList).filter(
+            func.lower(db.UserAnimeList.user_id) == func.lower(username),
+            db.UserAnimeList.anime_id == anime_uuid
+        ).first()
+        
+        if not ul_entry:
+            # If not in collection, we could add it, but for now we expect it to be there
+            raise HTTPException(status_code=404, detail="Anime not in collection")
+            
+        ul_entry.status = db_status
+        session.commit()
+        
+        # Sentry log
+        sentry_sdk.capture_message("backlog.status_updated", level="info",
+            extras={"anime_id": id, "new_status": data.status, "user_id": username})
+            
+        # Return the updated entry (refetching to get full anime data)
+        updated = session.query(db.UserAnimeList, db.Anime)\
+            .join(db.Anime, db.UserAnimeList.anime_id == db.Anime.id)\
+            .filter(db.UserAnimeList.id == ul_entry.id).first()
+            
+        ul, a = updated
+        return {
+            "id": a.anilist_id or a.mal_id,
+            "mal_id": a.mal_id,
+            "title": a.title_romaji,
+            "episodes": a.episodes or 0,
+            "watched_episodes": ul.episodes_watched or 0,
+            "format": a.format or "TV",
+            "genres": [g.get('name') for g in a.genres] if a.genres and isinstance(a.genres, list) else [],
+            "cover_image": a.image_url,
+            "score": ul.score,
+            "rank": a.popularity or 0
+        }
+
+@app.get("/api/user/preferences")
+def get_preferences(username: str = Depends(get_current_user)):
+    with db.get_db() as session:
+        user = session.query(db.User).filter(func.lower(db.User.username) == func.lower(username)).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "watch_rate_per_day": user.watch_rate_per_day or 3,
+            "theme": user.custom_theme_selection or "NEURAL_DARK"
+        }
+
+@app.patch("/api/user/preferences")
+def update_preferences(data: PreferencesUpdate, username: str = Depends(get_current_user)):
+    with db.get_db() as session:
+        update_data = {}
+        if data.watch_rate_per_day is not None:
+            update_data["watch_rate_per_day"] = data.watch_rate_per_day
+        if data.theme is not None:
+            update_data["custom_theme_selection"] = data.theme
+            
+        if update_data:
+            session.query(db.User).filter(func.lower(db.User.username) == func.lower(username)).update(update_data)
+            session.commit()
+        return {"ok": True}
 
 @app.get("/api/anime/summary")
 def get_episode_summary(idMal: int, episode: int):
@@ -539,14 +783,18 @@ def get_episode_summary(idMal: int, episode: int):
                 return {"synopsis": synopsis}
             return {"synopsis": "No spoiler-free summary available for this episode."}
         return {"synopsis": "Could not fetch summary from Jikan API."}
-    except Exception:
+    except Exception as e:
+        sentry_sdk.capture_exception(e)
         return {"synopsis": "Error connecting to community API."}
 
 # ── Seasonal Charts ────────────────────────────────────────────────────────────
 @app.get("/api/anime/seasonal")
 def get_seasonal(year: int, season: str, page: int = 1):
-    data, page_info = al.fetch_anilist_seasonal(year, season, page)
-    return {"data": data, "pageInfo": page_info}
+    try:
+        result = al.fetch_seasonal_intel(year, season, page)
+        return JSONResponse(status_code=200, content=result)
+    except ScheduleFetchError as e:
+        return JSONResponse(status_code=503, content={"error": "schedule_unavailable", "message": str(e)})
 
 @app.get("/api/anime/top")
 def get_top_anime(page: int = 1, per_page: int = 50, genre: Optional[str] = None, year: Optional[int] = None):
@@ -557,46 +805,9 @@ def get_top_anime(page: int = 1, per_page: int = 50, genre: Optional[str] = None
 def get_smart_relations(idMal: int):
     return {"data": al.fetch_anilist_relations(idMal)}
 
-@app.get("/api/activity")
-def get_activity():
-    return {"data": db.get_activity_feed(50)}
 
-@app.delete("/api/activity")
-def clear_activity():
-    with db.get_db() as conn:
-        conn.execute("DELETE FROM activity_log")
-        conn.commit()
-    return {"message": "Activity feed cleared"}
 
-async def cleanup_activity_task():
-    """Background task to delete activity older than 7 days every 6 hours."""
-    while True:
-        try:
-            with db.get_db() as conn:
-                # Delete entries older than 7 days
-                cutoff = (datetime.now() - timedelta(days=7)).isoformat()
-                conn.execute("DELETE FROM activity_log WHERE timestamp < ?", (cutoff,))
-                conn.commit()
-            print(f"[Cleanup] Old activity cleared at {datetime.now()}")
-        except Exception as e:
-            print(f"[Cleanup Error]: {e}")
-        
-        await asyncio.sleep(6 * 3600) # Wait 6 hours
 
-# ── Notifications ──────────────────────────────────────────────────────────────
-@app.get("/api/notifications")
-def get_notifications(username: str):
-    notifications = db.get_notifications(username)
-    unread = sum(1 for n in notifications if not n['is_read'])
-    return {"data": notifications, "unread": unread}
-
-class NotificationRead(BaseModel):
-    username: str
-
-@app.post("/api/notifications/read")
-def mark_notifications_as_read(data: NotificationRead):
-    db.mark_notifications_read(data.username)
-    return {"message": "Notifications marked as read"}
 
 # ── Custom Fields (Tags, Notes, Sub-scores) ────────────────────────────────────
 class CustomFieldsUpdate(BaseModel):
@@ -674,6 +885,11 @@ def update_profile(data: ProfileUpdate):
     return {"message": "Profile updated"}
 
 # ── Public Profile ─────────────────────────────────────────────────────────────
+@app.delete("/api/user/account")
+def delete_account(username: str):
+    db.delete_user_account(username)
+    return {"message": "IDENTITY_TERMINATED"}
+
 @app.get("/api/profile/{username}")
 def get_public_profile(username: str):
     profile = db.get_public_profile(username)
@@ -690,32 +906,42 @@ from fastapi import BackgroundTasks
 async def fetch_missing_metadata_task(username: str):
     """Background worker to fetch images/genres for imported MAL entries."""
     with db.get_db() as conn:
-        c = conn.cursor()
-        c.execute("SELECT anime_id, idMal, title FROM user_anime WHERE username=? AND (image_url='' OR image_url IS NULL)", (username,))
-        missing = c.fetchall()
+        # We look for anime records linked to this user that lack an image_url
+        missing = conn.execute(
+            text("""
+                SELECT a.anilist_id, a.mal_id, a.title_romaji, a.id 
+                FROM anime a
+                JOIN user_anime_list ul ON a.id = ul.anime_id
+                WHERE ul.user_id = :uid AND (a.image_url = '' OR a.image_url IS NULL)
+            """),
+            {"uid": username}
+        ).fetchall()
         
     if not missing:
         return
 
     print(f"[Metadata Task] Syncing {len(missing)} titles for {username}...")
-    for aid, mid, title in missing:
+    for aid, mid, title, anime_uuid in missing:
         try:
-            # 1. Try to fetch from AniList by MAL ID first (most accurate)
-            # We use mode="search" with query if idMal search fails.
-            # But AniList fetcher handles mode="search". Let's use it.
-            search_query = title
-            # Search by title
-            results, _ = al.fetch_anilist(query=search_query, mode="search", perPage=1)
-            
+            # Try to fetch from AniList
+            results, _ = al.fetch_anilist(query=title, mode="search", perPage=1)
             if results:
                 best_match = results[0]
-                # Update DB
-                with db.get_db() as conn:
-                    conn.execute("""UPDATE user_anime SET image_url=?, genres=? 
-                                 WHERE username=? AND anime_id=?""",
-                                 (best_match['images']['jpg']['image_url'], 
-                                  ','.join([g['name'] for g in best_match['genres']]),
-                                  username, aid))
+                # Update Anime DB (Master record)
+                with db.get_db() as session:
+                    session.execute(
+                        text("""
+                            UPDATE anime 
+                            SET image_url = :img, genres = CAST(:genres AS JSON)
+                            WHERE id = :id
+                        """),
+                        {
+                            "img": best_match['images']['jpg']['image_url'],
+                            "genres": json.dumps(best_match['genres']),
+                            "id": anime_uuid
+                        }
+                    )
+                    session.commit()
             
             # Sleep slightly to avoid spamming
             await asyncio.sleep(0.5) 
@@ -723,7 +949,8 @@ async def fetch_missing_metadata_task(username: str):
             print(f"Failed to sync metadata for {title}: {e}")
 
 @app.post("/api/import/mal")
-async def import_mal(username: str, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def import_mal(username: str, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user), file: UploadFile = File(...)):
+    verify_owner(current_user, username)
     content = await file.read()
     try:
         root = ET.fromstring(content)
@@ -764,18 +991,49 @@ async def import_mal(username: str, background_tasks: BackgroundTasks, file: Upl
 
     if import_list:
         stats = db.batch_import_anime(username, import_list)
-        db.log_activity(username, f"imported {len(import_list)} titles from MAL", "Multiple Titles", 0)
         
-        # Trigger background metadata fetch
+        # Offload the processing to the background
         background_tasks.add_task(fetch_missing_metadata_task, username)
         
         return {
-            "message": f"✅ Import complete! {stats['inserted']} added, {stats['updated']} merged.",
+            "message": "Import sequence initiated. Your collection will update shortly.",
+            "username": username,
             "inserted": stats['inserted'],
             "updated": stats['updated']
         }
 
     return {"message": "No anime found to import."}
+
+@app.post("/api/sync/anilist")
+async def sync_anilist(username: str, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
+    """
+    Syncs the user's collection with AniList using the app username.
+    Assumes AniList username is the same as the app username.
+    """
+    try:
+        # Fetch from AniList
+        # Note: We do it synchronously for the first page to give immediate feedback if possible,
+        # but for safety let's offload the whole thing.
+        background_tasks.add_task(execute_anilist_sync, username)
+        return {"message": "SYNC_PROTOCOL_INITIATED // ARCHIVE_UPDATE_IN_PROGRESS"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def execute_anilist_sync(username: str):
+    """Actual worker logic for AniList sync."""
+    print(f"[Sync] Starting AniList sync for {username}...")
+    import anilist as al
+    import database as db
+    
+    data_list = al.fetch_anilist_user_list(username)
+    if data_list:
+        db.batch_import_anime(username, data_list)
+        # Fetch metadata for any missing ones
+        await fetch_missing_metadata_task(username)
+        print(f"[Sync] AniList sync complete for {username}")
+    else:
+        print(f"[Sync] No data found or error for {username}")
 
 if __name__ == "__main__":
     import uvicorn

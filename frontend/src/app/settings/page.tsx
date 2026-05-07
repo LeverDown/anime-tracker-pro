@@ -249,6 +249,7 @@ export default function SettingsPage() {
               onChange={(p) => updateState({ notifications: p })}
             />
             <SecurityProtocol 
+              username={auth?.user || ""}
               onLogout={() => {
                 if (confirm('TERMINATE_ALL_SESSIONS?')) {
                   auth?.logout();

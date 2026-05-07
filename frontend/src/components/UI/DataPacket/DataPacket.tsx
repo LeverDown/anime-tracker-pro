@@ -16,13 +16,20 @@ interface DataPacketProps extends SeasonalAnimeEntry {
 }
 
 
-export const DataPacket: React.FC<DataPacketProps> = ({
+export const DataPacket: React.FC<any> = ({
   id,
+  id_mal,
   title,
+  title_romaji,
+  title_english,
   coverImage,
+  cover_image,
   averageScore,
+  average_score,
   episodes,
   nextAiringEpisode,
+  airing_at,
+  episode,
   status,
   format,
   index,
@@ -49,13 +56,18 @@ export const DataPacket: React.FC<DataPacketProps> = ({
     return `${day} ${hours}:${minutes} JST`;
   };
 
-  const currentEp = (status === 'FINISHED'
+  const displayTitle = title?.english || title?.romaji || title_english || title_romaji;
+  const displayTitleRomaji = title?.romaji || title_romaji;
+  const displayCover = coverImage?.large || coverImage?.extraLarge || cover_image;
+  const displayScore = averageScore ?? average_score;
+
+  const currentEp = (status === 'FINISHED' || status === 'FINISHED_AIRING')
     ? episodes
     : nextAiringEpisode
       ? nextAiringEpisode.episode - 1
-      : 0) || 0;
+      : episode ? episode - 1 : 0;
 
-  const progress = episodes ? (currentEp / episodes) * 100 : 0;
+  const progress = episodes ? ((currentEp || 0) / episodes) * 100 : 0;
 
   return (
     <motion.div
@@ -88,8 +100,8 @@ export const DataPacket: React.FC<DataPacketProps> = ({
         </div>
         {!hasError && (
           <img
-            src={coverImage.large}
-            alt={title.romaji}
+            src={displayCover}
+            alt={displayTitleRomaji}
             onError={() => setHasError(true)}
             style={{
               width: '100%',
@@ -118,28 +130,28 @@ export const DataPacket: React.FC<DataPacketProps> = ({
           }} />
         )}
 
-        {averageScore !== null && (
+        {displayScore !== null && displayScore !== undefined && (
           <motion.div
             className={styles.scoreBadge}
             initial={{ scale: 0.8, opacity: 0.5 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
           >
-            {averageScore}
+            {displayScore}
           </motion.div>
         )}
 
-        {(airtimeOverride || nextAiringEpisode) && (
+        {(airtimeOverride || nextAiringEpisode || airing_at) && (
           <div className={styles.airtimeStrip}>
-            {airtimeOverride || (nextAiringEpisode && formatAirtime(nextAiringEpisode.airingAt))}
+            {airtimeOverride || (nextAiringEpisode ? formatAirtime(nextAiringEpisode.airingAt) : (airing_at ? formatAirtime(airing_at) : ''))}
           </div>
         )}
 
         {children}
       </div>
 
-      <div className={styles.title} title={title.english || title.romaji}>
-        {title.english || title.romaji}
+      <div className={styles.title} title={displayTitle}>
+        {displayTitle}
       </div>
 
       {showSpecs && (

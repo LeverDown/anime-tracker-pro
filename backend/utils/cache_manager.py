@@ -1,7 +1,9 @@
 import json
 import time
 import logging
+import os
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 try:
     import redis
@@ -12,11 +14,24 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 class CacheManager:
-    def __init__(self, host='localhost', port=6379, db=0, default_ttl=3600):
+    def __init__(self, host=None, port=None, db=0, default_ttl=3600):
         self.default_ttl = default_ttl
         self.use_redis = False
         self.redis_client = None
         self._memory_cache = {}
+
+        # Resolve Redis address
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        
+        try:
+            url = urlparse(redis_url)
+            host = url.hostname or 'localhost'
+            port = url.port or 6379
+            db = int(url.path[1:]) if url.path and len(url.path) > 1 else 0
+        except Exception:
+            host = host or 'localhost'
+            port = port or 6379
+            db = db
 
         if REDIS_AVAILABLE:
             try:
@@ -25,14 +40,15 @@ class CacheManager:
                     port=port, 
                     db=db, 
                     socket_connect_timeout=2,
+                    socket_timeout=2,
                     decode_responses=True
                 )
                 # Test connection
                 self.redis_client.ping()
                 self.use_redis = True
-                logger.info("✅ Redis Cache initialized successfully.")
+                logger.info(f"✅ Redis Cache initialized successfully at {host}:{port}")
             except Exception as e:
-                logger.warning(f"⚠️ Redis not available ({e}). Falling back to In-Memory cache.")
+                logger.warning(f"⚠️ Redis not available at {host}:{port} ({e}). Falling back to In-Memory cache.")
                 self.use_redis = False
 
     def get(self, key: str) -> Optional[Any]:

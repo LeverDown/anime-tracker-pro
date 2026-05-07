@@ -5,6 +5,7 @@ export const BACKEND_URL = 'http://localhost:8000';
 const api = axios.create({
   baseURL: `${BACKEND_URL}/api`,
   timeout: 30000,
+  withCredentials: true,
 });
 
 // Diagnostic Logger

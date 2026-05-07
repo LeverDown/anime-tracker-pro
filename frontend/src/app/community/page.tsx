@@ -35,23 +35,7 @@ export default function CommunityPage(): JSX.Element {
 
   useEffect(() => {
     if (!mounted) return;
-    
-    let isMounted = true;
-    const fetchActivity = async () => {
-      try {
-        const res = await api.get('/activity');
-        if (isMounted) {
-          setActivities(res.data.data || []);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error("Activity fetch error", err);
-        if (isMounted) setLoading(false);
-      }
-    };
-    
-    fetchActivity();
-    return () => { isMounted = false; };
+    setLoading(false);
   }, [mounted]);
 
   if (!mounted) return <div className={styles.skeletonCard} />;
@@ -74,13 +58,6 @@ export default function CommunityPage(): JSX.Element {
             INTEL_STATUS // NOMINAL
           </div>
           <div style={{ flex: 1 }} />
-          <Button 
-            variant="secondary" 
-            icon={<Users size={16} />}
-            style={{ borderRadius: 0, fontSize: '10px', fontWeight: 900, fontFamily: 'var(--font-mono)' }}
-          >
-            FRIENDS_ONLY //
-          </Button>
         </div>
       </header>
 

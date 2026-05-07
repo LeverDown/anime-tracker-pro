@@ -53,7 +53,7 @@ export default function Page() {
           <a
             target="_blank"
             rel="noopener"
-            href="https://thevelvetroom.sentry.io/issues/?project=4511279968485376"
+            href="https://thevelvetroom-qz.sentry.io/issues/?project=4511313610473472"
           >
             Issues Page
           </a>

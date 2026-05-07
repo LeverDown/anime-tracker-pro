@@ -157,6 +157,22 @@
   --hud-footer-border:    hsl(var(--primary-glow) / 0.12);
   --hud-footer-left:      hsl(var(--primary-glow) / 0.25);
   --hud-footer-right:     hsl(var(--primary-glow) / 0.5);
+
+  /* --- BACKLOG MANAGER SPECIFIC --- */
+  --primary-color: 38 91% 55%; /* Amber triple */
+  --bg:           #0d1117;
+  --bg2:          #131920;
+  --bg3:          #1a2130;
+  --bg4:          #1f2a3a;
+  --text-hi:      #ffffff;
+  --text-md:      rgba(255,255,255,0.55);
+  --text-lo:      hsl(var(--primary-color) / 0.35);
+  --border:       hsl(var(--primary-color) / 0.2);
+  --border-h:     hsl(var(--primary-color) / 0.5);
+  --acc-dim:      hsl(var(--primary-color) / 0.12);
+  --acc-faint:    hsl(var(--primary-color) / 0.06);
+  --danger:       #e05252;
+  --success:      #52e08a;
 }
 
 /* Reset & Base */

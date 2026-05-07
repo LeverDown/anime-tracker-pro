@@ -26,10 +26,10 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
   const [tempName, setTempName] = useState(username);
   
   const stats = [
-    { key: 'WATCHED', val: profile?.total_titles || '847', unit: 'series' },
-    { key: 'EPISODES', val: profile?.completed || '12.4k', unit: '' },
-    { key: 'MEAN_SCORE', val: profile?.avg_score?.toFixed(1) || '7.8', unit: '' },
-    { key: 'DAYS', val: profile?.days_watched || '192', unit: 'd' },
+    { key: 'WATCHED', val: profile?.total_titles ?? '0', unit: 'series' },
+    { key: 'EPISODES', val: profile?.total_episodes ?? '0', unit: '' },
+    { key: 'MEAN_SCORE', val: profile?.avg_score?.toFixed(1) ?? '0.0', unit: '' },
+    { key: 'DAYS', val: profile?.days_watched ?? '0', unit: 'd' },
   ];
   return (
     <section className="sector">

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Compass, Trophy, Calendar, 
-  Library, Bell, LogOut, Zap, Sparkles,
+  Library, Bell, LogOut, Activity, Sparkles,
   Users, BarChart3, Settings as SettingsIcon, Dices
 } from 'lucide-react';
 import { AuthContext } from '../../app/AuthContext';
@@ -35,28 +35,13 @@ export default function Sidebar(): JSX.Element {
 
   useEffect(() => {
     if (!user) return;
-    const poll = async (): Promise<void> => {
-      try {
-        const r = await api.get<{ data: Notification[], unread: number }>('/notifications', { params: { username: user } });
-        setNotifications(r.data.data || []);
-        setUnreadCount(r.data.unread || 0);
-      } catch (err) {
-        console.error("Notification poll failed", err);
-      }
-    };
-    poll();
-    const interval = setInterval(poll, 30000);
-    return () => clearInterval(interval);
+    // Notification polling deactivated during Community Purge
+    setNotifications([]);
+    setUnreadCount(0);
   }, [user]);
 
   const markRead = async (): Promise<void> => {
-    if (!user) return;
-    try {
-      await api.post('/notifications/read', { username: user });
-      setUnreadCount(0);
-    } catch (err) {
-      console.error("Failed to mark notifications as read", err);
-    }
+    // Logic deactivated
   };
 
   const logout = (): void => {
@@ -90,7 +75,7 @@ export default function Sidebar(): JSX.Element {
       <div className={styles.scrollArea}>
         <div className={styles.brand}>
           <div className={styles.logo}>
-            <Zap size={20} color="white" fill="white" />
+            <Activity size={20} color="white" fill="white" />
           </div>
           <h1 className={styles.brandTitle}>
             RONIN<span style={{ color: 'var(--primary-color)' }}>HUB</span>

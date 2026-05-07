@@ -108,6 +108,8 @@
   width: 100%;
   margin-bottom: var(--space-12);
   border-top: 1px solid var(--hud-footer-border);
+  position: relative;
+  min-height: 500px;
 }
 
 .cardWrapper {

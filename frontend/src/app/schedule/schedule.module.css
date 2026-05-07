@@ -82,6 +82,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
   gap: var(--space-6);
+  position: relative;
+  min-height: 500px;
 }
 
 /* Horizontal Card */

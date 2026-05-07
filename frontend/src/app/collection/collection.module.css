@@ -301,6 +301,8 @@
 
 .episodeSlider {
   -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
   width: 100%;
   height: 2px;
   background: var(--hud-footer-border);
@@ -309,11 +311,24 @@
 
 .episodeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 10px;
   height: 10px;
   background: var(--primary-color);
   border-radius: 0;
   cursor: pointer;
+  box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.episodeSlider::-moz-range-thumb {
+  -moz-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  background: var(--primary-color);
+  border-radius: 0;
+  cursor: pointer;
+  border: none;
   box-shadow: 0 0 10px var(--primary-glow);
 }
 
@@ -432,4 +447,20 @@
 .closeDropdown:hover {
   color: var(--primary-color);
   transform: rotate(90deg);
+}
+
+.scoreSelect {
+  background: var(--bg-deep);
+  border: 1px solid var(--hud-footer-border);
+  color: var(--text-main);
+  padding: 2px 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.scoreSelect:hover {
+  border-color: var(--primary-color);
 }

@@ -9,6 +9,7 @@ import { Navbar } from '../components/Navbar';
 import { PageTransition } from '../components/UI/PageTransition';
 import { hexToHSL } from '@/utils/color';
 import { getUserProfile, getUserThemeSelection } from '@/api/user';
+import QueryProvider from './providers/QueryProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -45,31 +46,38 @@ function ThemeManager({ children }: { children: React.ReactNode }): JSX.Element 
         applyTheme(cachedColor || '#ff0055', cachedBg || '');
       }
 
-      getUserThemeSelection(user).then(data => {
-        const sel = data.selection;
-        const RDS_PRESETS: Record<string, string> = {
-          NEURAL_DARK: '#ff2d55',
-          CRYOGENIC: '#00d4ff',
-          SPECTRAL: '#ff6a00',
-          EUPHORIC: '#b44fff',
-          OVERRIDE: '#39ff14',
-          HAZARD: '#ffaa00',
-          // Legacy mappings
-          'Dark': '#ff2d55', 'Winter': '#00d4ff', 'Halloween': '#ff6a00', 'White': '#b44fff', 'Custom': '#39ff14'
-        };
+      const loadThemeProtocol = async () => {
+        try {
+          const data = await getUserThemeSelection(user);
+          const sel = data.selection;
+          const RDS_PRESETS: Record<string, string> = {
+            NEURAL_DARK: '#ff2d55',
+            CRYOGENIC: '#00d4ff',
+            SPECTRAL: '#ff6a00',
+            EUPHORIC: '#b44fff',
+            OVERRIDE: '#39ff14',
+            HAZARD: '#ffaa00',
+            'Dark': '#ff2d55', 'Winter': '#00d4ff', 'Halloween': '#ff6a00', 'White': '#b44fff', 'Custom': '#39ff14'
+          };
 
-        if (sel && sel !== 'OVERRIDE' && sel !== 'Custom') {
-          applyTheme(RDS_PRESETS[sel] || '#ff2d55', '');
-        } else {
-          getUserProfile(user).then(pr => {
+          if (sel && sel !== 'OVERRIDE' && sel !== 'Custom') {
+            applyTheme(RDS_PRESETS[sel] || '#ff2d55', '');
+          } else {
+            const pr = await getUserProfile(user);
             if (pr.theme_color) applyTheme(pr.theme_color, pr.atmosphere_url || '');
-          });
+          }
+        } catch (err) {
+          // Fallback to Profile if Theme Selection fails
+          try {
+            const pr = await getUserProfile(user);
+            if (pr.theme_color) applyTheme(pr.theme_color, pr.atmosphere_url || '');
+          } catch (nestedErr) {
+            console.error("PROTOCOL_ERROR // THEME_SYNC_TERMINATED:", nestedErr);
+          }
         }
-      }).catch(() => {
-        getUserProfile(user).then(pr => {
-          if (pr.theme_color) applyTheme(pr.theme_color, pr.atmosphere_url || '');
-        });
-      });
+      };
+
+      loadThemeProtocol();
     } else {
       applyTheme('#ff0055', '');
       document.documentElement.style.setProperty('--custom-bg', 'none');
@@ -123,32 +131,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [pathname]);
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <AuthProvider>
-          <ThemeManager>
-            <IntelProvider>
-              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh' }}>
-                {!isAuthPage && <Navbar />}
-                <main style={{
-                  marginTop: isAuthPage ? 0 : '52px',
-                  padding: isAuthPage ? 0 : '12px 18px',
-                  flex: 1,
-                  minWidth: 0,
-                  position: 'relative'
-                }}>
-                  <PageTransition
-                    transitionKey={pathname}
-                    variant={isAuthPage ? 'fade' : 'slide'}
-                    direction={direction.current}
-                  >
-                    {children}
-                  </PageTransition>
-                </main>
-              </div>
-              <IntelHUD />
-            </IntelProvider>
-          </ThemeManager>
+          <QueryProvider>
+            <ThemeManager>
+              <IntelProvider>
+                <div style={{ display: 'flex', flexDirection: 'column', width: '100%', minHeight: '100vh' }}>
+                  {!isAuthPage && <Navbar />}
+                  <main style={{
+                    marginTop: isAuthPage ? 0 : '52px',
+                    padding: isAuthPage ? 0 : '12px 18px',
+                    flex: 1,
+                    minWidth: 0,
+                    position: 'relative'
+                  }}>
+                    <PageTransition
+                      transitionKey={pathname}
+                      variant={isAuthPage ? 'fade' : 'slide'}
+                      direction={direction.current}
+                    >
+                      {children}
+                    </PageTransition>
+                  </main>
+                </div>
+                <IntelHUD />
+              </IntelProvider>
+            </ThemeManager>
+          </QueryProvider>
         </AuthProvider>
       </body>
     </html>

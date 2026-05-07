@@ -1,0 +1,18 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package*.json ./
+
+RUN npm install
+
+# Copying the rest is not strictly necessary for dev if we use volumes,
+# but it's good practice for initial container state.
+COPY . .
+
+# Environment variable for hot-reloading in Docker
+ENV WATCHPACK_POLLING=true
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

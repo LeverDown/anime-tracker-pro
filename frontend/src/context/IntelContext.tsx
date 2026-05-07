@@ -1,7 +1,7 @@
 "use client";
-import React, { createContext, useState, useEffect, useCallback, useContext, useRef } from 'react';
+import React, { createContext, useState, useEffect, useCallback, useContext } from 'react';
 import { AuthContext } from '@/app/AuthContext';
-import api from '@/api/client';
+import { useAlertsSSE } from '@/lib/useAlertsSSE';
 
 export interface AiringEpisode {
   id: number;
@@ -51,23 +51,36 @@ const safeLocalSet = (key: string, value: unknown): void => {
 export const IntelProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useContext(AuthContext);
   const userId = auth?.user ?? null;
+  
   const [upcomingEpisodes, setUpcomingEpisodes] = useState<AiringEpisode[]>([]);
   const [seasonalIntel, setSeasonalIntel] = useState<SeasonalIntel | null>(null);
-  const cancelRef = useRef(false);
 
-  const refreshIntel = useCallback(async () => {
-    if (!userId) return;
-    cancelRef.current = false;
-    try {
+  // For simplicity, check if user is logged in to enable SSE.
+  // In a full implementation, we'd fetch actual notification preferences.
+  const alertsEnabled = !!userId;
+  
+  const { lastAlert, lastSeasonal } = useAlertsSSE(alertsEnabled);
+
+  useEffect(() => {
+    if (lastAlert) {
       const dismissed = safeLocalGet<number[]>('dismissed_alerts', []);
-      
-      // In a real scenario, this fetches from /api/notifications/airing
-      const data: AiringEpisode[] = []; 
-      
-      if (cancelRef.current) return;
-      setUpcomingEpisodes(data.filter(ep => !dismissed.includes(ep.id)));
+      if (!dismissed.includes(lastAlert.anime_id)) {
+        setUpcomingEpisodes(prev => {
+          if (prev.find(ep => ep.id === lastAlert.anime_id && ep.episode === lastAlert.episode)) return prev;
+          return [...prev, {
+            id: lastAlert.anime_id,
+            title: lastAlert.title,
+            episode: lastAlert.episode,
+            airingAt: lastAlert.airing_at,
+            thumbnail: lastAlert.cover_image
+          }];
+        });
+      }
+    }
+  }, [lastAlert]);
 
-      // SESSION_INTEL_HANDSHAKE
+  useEffect(() => {
+    if (lastSeasonal) {
       let intelDismissed = false;
       try { 
         if (typeof window !== 'undefined') {
@@ -76,18 +89,21 @@ export const IntelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       } catch {}
 
       if (!intelDismissed) {
-        if (cancelRef.current) return;
         setSeasonalIntel({
-          season: "SUMMER",
-          year: 2024,
-          trendingTargets: ["Oshi no Ko S2", "Tower of God S2", "Monogatari Off Season"],
-          summary: "PROJECTION: HIGH-INTENSITY SEQUEL DOMINANCE DETECTED."
+          season: lastSeasonal.season,
+          year: lastSeasonal.year,
+          trendingTargets: ["New Data Available"],
+          summary: `PROJECTION: NEW INTEL ACQUIRED FOR ${lastSeasonal.season} ${lastSeasonal.year}. (${lastSeasonal.count} TARGETS)`
         });
       }
-    } catch (err) {
-      console.error("INTEL_FETCH_FAILURE:", err);
     }
-  }, [userId]);
+  }, [lastSeasonal]);
+
+  const refreshIntel = useCallback(async () => {
+    // Legacy polling fallback or manual refresh trigger can go here.
+    // We rely on SSE now, so this is mostly a no-op for alerts, 
+    // but could be used to fetch missed alerts.
+  }, []);
 
   const dismissAlert = useCallback((id: number) => {
     setUpcomingEpisodes(prev => prev.filter(ep => ep.id !== id));
@@ -103,17 +119,6 @@ export const IntelProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch {}
   }, []);
-
-  useEffect(() => {
-    if (userId) {
-      refreshIntel();
-      const interval = setInterval(refreshIntel, 300000);
-      return () => {
-        cancelRef.current = true;
-        clearInterval(interval);
-      };
-    }
-  }, [userId, refreshIntel]);
 
   return (
     <IntelContext.Provider value={{ upcomingEpisodes, seasonalIntel, dismissAlert, dismissIntel, refreshIntel }}>

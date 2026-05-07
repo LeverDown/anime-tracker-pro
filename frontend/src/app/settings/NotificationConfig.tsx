@@ -34,7 +34,6 @@ export const NotificationConfig: React.FC<NotificationConfigProps> = ({ prefs, o
       <div className="sector-body">
         {toggleRow('airingAlerts', 'AIRING_ALERTS', 'New episode broadcast notifications')}
         {toggleRow('seasonalIntel', 'SEASONAL_INTEL', 'New season preview briefings')}
-        {toggleRow('communityFeed', 'COMMUNITY_FEED', 'Activity from followed operators')}
         {toggleRow('scoreUpdates', 'SCORE_UPDATES', 'AniList score delta alerts')}
         {toggleRow('systemAlerts', 'SYSTEM_ALERTS', 'Maintenance and platform updates')}
         {toggleRow('backlogReminders', 'BACKLOG_REMINDERS', 'Roulette and watchlist nudges')}

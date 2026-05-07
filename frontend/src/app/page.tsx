@@ -4,8 +4,8 @@ import React, { useState, useContext, useEffect, JSX } from 'react';
 import { useRouter } from 'next/navigation';
 import { AuthContext } from './AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Shield, ChevronRight, Sparkles, Mail, Lock } from 'lucide-react';
-import api from '../api/client';
+import { Activity, Shield, ChevronRight, Sparkles, Mail, Lock } from 'lucide-react';
+import { useLogin, useRegister } from '@/hooks/queries/useUser';
 import { Button, Card, Input, Particles } from '../components/UI';
 import styles from './login.module.css';
 
@@ -19,7 +19,6 @@ export default function LoginPage(): JSX.Element {
   const [password, setPassword] = useState<string>('');
   const [email, setEmail] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
   
   const [mounted, setMounted] = useState<boolean>(false);
   const auth = useContext(AuthContext);
@@ -37,33 +36,41 @@ export default function LoginPage(): JSX.Element {
     }
   }, [user, router, mounted]);
 
-  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+  const { mutate: login, isPending: loginLoading } = useLogin();
+  const { mutate: register, isPending: registerLoading } = useRegister();
+  const loading = loginLoading || registerLoading;
+
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
     if (!username || !password || (isRegister && !email)) {
       setError("PLEASE_COMPLETE_ALL_IDENTITY_FIELDS");
-      setLoading(false);
       return;
     }
 
-    try {
-      if (isRegister) {
-        await api.post('/auth/register', { username, password, email });
-        setIsRegister(false);
-        setError("REGISTRATION_SUCCESS_PLEASE_LOGIN");
-      } else {
-        const res = await api.post('/auth/login', { username, password });
-        if (auth?.login) {
-          auth.login(res.data.username);
-          router.push('/discover');
+    if (isRegister) {
+      register({ username, password, email }, {
+        onSuccess: () => {
+          setIsRegister(false);
+          setError("REGISTRATION_SUCCESS_PLEASE_LOGIN");
+        },
+        onError: (err: any) => {
+          setError(err.response?.data?.detail || "REGISTRATION_REFUSED_BY_CENTRAL_CORE");
         }
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "AUTHORIZATION_REFUSED_BY_CENTRAL_CORE");
-    } finally {
-      setLoading(false);
+      });
+    } else {
+      login({ username, password }, {
+        onSuccess: (data) => {
+          if (auth?.login) {
+            auth.login(data.username);
+            router.push('/discover');
+          }
+        },
+        onError: (err: any) => {
+          setError(err.response?.data?.detail || "AUTHORIZATION_REFUSED_BY_CENTRAL_CORE");
+        }
+      });
     }
   };
 
@@ -89,11 +96,10 @@ export default function LoginPage(): JSX.Element {
               className={styles.logoIcon}
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                console.log("INITIALIZING_SENTRY_DIAGNOSTIC_TRIGGER...");
-                throw new Error("SENTRY_CLIENT_UPLINK_TEST_SUCCESSFUL");
+                console.log("LOG_SYSTEM_CHECK_PASSED");
               }}
             >
-              <Zap size={48} color="white" fill="white" />
+              <Activity size={48} color="white" fill="white" />
             </motion.div>
             <h1 className={styles.title}>
               RONIN<span style={{ color: 'var(--primary-color)' }}>HUB</span>

@@ -45,8 +45,37 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, desc, badge, danger,
   </div>
 );
 
-export const SecurityProtocol: React.FC<{ onSync?: () => void; onLogout?: () => void }> = ({ onSync, onLogout }) => {
+import api from '@/api/client';
+import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+
+export const SecurityProtocol: React.FC<{ username: string; onSync?: () => void; onLogout?: () => void }> = ({ username, onSync, onLogout }) => {
   const [status, setStatus] = React.useState('AUTH // SECURE');
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const handlePurge = async () => {
+    if (!confirm('INITIATE_PURGE_PROTOCOL? THIS ACTION IS IRREVERSIBLE AND WILL WIPE ALL YOUR LISTS.')) return;
+    
+    try {
+      setStatus('SYSTEM // PURGE_IN_PROGRESS');
+      await api.delete('/collection/purge', { params: { username } });
+      
+      // Force-reset all TanStack Query caches and clear everything
+      await queryClient.resetQueries({ queryKey: ['user'] });
+      queryClient.clear();
+      
+      setStatus('SYSTEM // PURGE_COMPLETE');
+      setTimeout(() => {
+        // Full page reload to ensure zero cached state in memory or storage
+        window.location.href = '/';
+      }, 1500);
+    } catch (err) {
+      console.error("PURGE_FAILED", err);
+      setStatus('SYSTEM // PURGE_FAILURE');
+      alert("CRITICAL_ERROR: PURGE_PROTOCOL_FAILED");
+    }
+  };
 
   const handleExport = () => {
     const data = { site: 'RoninHub', timestamp: new Date().toISOString(), version: '2.4.1' };
@@ -65,6 +94,29 @@ export const SecurityProtocol: React.FC<{ onSync?: () => void; onLogout?: () => 
       onSync?.();
       setStatus('CACHE // LOCAL_SYNC_NOMINAL');
     }, 1500);
+  };
+
+  const handleTerminate = async () => {
+    if (!confirm('!!! CRITICAL_ALERT !!!\n\nYOU ARE ABOUT TO PERMANENTLY TERMINATE THIS IDENTITY.\nTHIS WILL DELETE ALL COLLECTIONS, HISTORY, AND YOUR USER ACCOUNT.\n\nTHIS ACTION CANNOT BE UNDONE. PROCEED?')) return;
+    
+    try {
+      setStatus('SYSTEM // IDENTITY_DELETION_SEQUENCE_ACTIVE');
+      await api.delete('/user/account', { params: { username } });
+      
+      // Clear everything
+      await queryClient.resetQueries();
+      queryClient.clear();
+      if (onLogout) onLogout();
+      
+      setStatus('SYSTEM // IDENTITY_TERMINATED');
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+    } catch (err) {
+      console.error("TERMINATION_FAILED", err);
+      setStatus('SYSTEM // TERMINATION_FAILURE');
+      alert("CRITICAL_ERROR: IDENTITY_TERMINATION_SEQUENCE_FAULT");
+    }
   };
 
   return (
@@ -88,7 +140,8 @@ export const SecurityProtocol: React.FC<{ onSync?: () => void; onLogout?: () => 
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--s-accent)', letterSpacing: '0.12em', marginBottom: '10px' }}>
             ⚠ DANGER_ZONE // IRREVERSIBLE OPERATIONS
           </div>
-          <ActionRow icon="⊘" label="PURGE_ALL_DATA" desc="Wipe all lists and preferences" danger onClick={() => confirm('INITIATE_PURGE_PROTOCOL? THIS ACTION IS IRREVERSIBLE.') && setStatus('SYSTEM // PURGE_IN_PROGRESS')} />
+          <ActionRow icon="⊘" label="PURGE_ALL_DATA" desc="Wipe all lists and preferences" danger onClick={handlePurge} />
+          <ActionRow icon="💀" label="TERMINATE_IDENTITY" desc="Delete account and all neural data" danger onClick={handleTerminate} />
           <ActionRow icon="→" label="TERMINATE_SESSION" desc="Sign out all active devices" danger onClick={onLogout} />
         </div>
       </div>

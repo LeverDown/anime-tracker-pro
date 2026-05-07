@@ -1,9 +1,9 @@
 "use client";
 import React, { useState, useEffect, useContext, JSX, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { BarChart3, TrendingUp, Clock, Zap, Star, Activity, PieChart } from 'lucide-react';
+import { BarChart3, TrendingUp, Clock, Star, Activity, PieChart } from 'lucide-react';
 import { AuthContext } from '../AuthContext';
-import api from '../../api/client';
+import { useUserStats } from '@/hooks/queries/useUser';
 import { Button, Card } from '../../components/UI';
 import styles from './stats.module.css';
 
@@ -16,25 +16,13 @@ import styles from './stats.module.css';
 export default function StatsPage(): JSX.Element {
   const auth = useContext(AuthContext);
   const user = auth?.user;
-  const [stats, setStats] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
   const [mounted, setMounted] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (!user || !mounted) return;
-    
-    setLoading(true);
-    api.get(`/user/stats/${user}`)
-      .then(r => {
-        setStats(r.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [user, mounted]);
+  const { data: stats, isPending: loading } = useUserStats(user);
 
   const genreData = useMemo(() => {
     if (!stats?.genre_counts) return [];
@@ -84,7 +72,7 @@ ${genreData.map(([genre, count]: any) => `> ${genre.padEnd(20)} | ${count} TITLE
             <span className={styles.titlePrefix}>{"//"}</span> NEURAL_ANALYTICS
           </h1>
           <div style={{ display: 'flex', gap: '16px', fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '0.1em' }}>
-            <span><Zap size={14} color="var(--primary-color)" /> SYS // METRICS_ACTIVE</span>
+            <span><Activity size={14} color="var(--primary-color)" /> SYS // METRICS_ACTIVE</span>
             <span><Activity size={14} /> SECTOR // COGNITIVE_ANALYSIS</span>
           </div>
         </div>
