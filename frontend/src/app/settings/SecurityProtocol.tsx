@@ -1,5 +1,7 @@
 "use client";
 import React from 'react';
+import api from '@/api/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ActionRowProps {
   icon: string;
@@ -27,7 +29,7 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, desc, badge, danger,
     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
       <span style={{ fontSize: '13px', color: danger ? 'var(--s-accent)' : 'var(--s-text-md)' }}>{icon}</span>
       <div>
-        <div style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.06em', color: danger ? 'var(--s-accent)' : 'var(--s-text-hi)' }}>{label} //</div>
+        <div style={{ fontSize: '12px', fontWeight: 600, letterSpacing: '0.06em', color: danger ? 'var(--s-accent)' : 'var(--s-text-hi)' }}>{label} {'//'}</div>
         <div style={{ fontSize: '10px', color: 'var(--s-text-md)', marginTop: '2px' }}>{desc}</div>
       </div>
     </div>
@@ -45,14 +47,33 @@ const ActionRow: React.FC<ActionRowProps> = ({ icon, label, desc, badge, danger,
   </div>
 );
 
-import api from '@/api/client';
-import { useRouter } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-
 export const SecurityProtocol: React.FC<{ username: string; onSync?: () => void; onLogout?: () => void }> = ({ username, onSync, onLogout }) => {
   const [status, setStatus] = React.useState('AUTH // SECURE');
-  const router = useRouter();
   const queryClient = useQueryClient();
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setStatus('SYSTEM // IMPORT_IN_PROGRESS');
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const endpoint = file.name.toLowerCase().endsWith('.xml') ? '/import/mal' : '/import/animeschedule';
+      const res = await api.post(`${endpoint}?username=${username}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setStatus(`SYSTEM // IMPORT_SUCCESS (+${res.data.inserted})`);
+      queryClient.invalidateQueries({ queryKey: ['user', username] });
+    } catch (err) {
+      console.error("IMPORT_FAILED", err);
+      setStatus('SYSTEM // IMPORT_FAILURE');
+      alert("CRITICAL_ERROR: DATA_IMPORT_FAILED");
+    }
+  };
 
   const handlePurge = async () => {
     if (!confirm('INITIATE_PURGE_PROTOCOL? THIS ACTION IS IRREVERSIBLE AND WILL WIPE ALL YOUR LISTS.')) return;
@@ -127,6 +148,14 @@ export const SecurityProtocol: React.FC<{ username: string; onSync?: () => void;
       </div>
       <div className="sector-body">
         <ActionRow icon="↺" label="SYNC_DATA_LOCALLY" desc="Push all list data to local cache" onClick={handleSync} />
+        <ActionRow icon="⬆" label="IMPORT_ARCHIVE" desc="Upload AniList / MAL / AnimeSchedule archive" onClick={() => fileInputRef.current?.click()} />
+        <input 
+          type="file" 
+          ref={fileInputRef} 
+          style={{ display: 'none' }} 
+          accept=".json,.xml" 
+          onChange={handleImport} 
+        />
         <ActionRow icon="⬇" label="EXPORT_ARCHIVE" desc="Download full data archive — JSON / CSV" onClick={handleExport} />
         <ActionRow icon="⊕" label="CHANGE_PASSWORD" desc="Rotate authentication credentials" onClick={() => setStatus('AUTH // PASSWORD_RECOVERY_PENDING')} />
         <ActionRow icon="◎" label="TWO_FACTOR_AUTH" desc="TOTP authenticator — currently disabled" badge="DISABLED" onClick={() => setStatus('AUTH // TOTP_SETUP_PROTOCOL_REQUIRED')} />

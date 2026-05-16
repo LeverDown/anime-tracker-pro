@@ -36,7 +36,7 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
     query ($search: String, $sort: [MediaSort], $genre: String, $page: Int, $perPage: Int) {
       Page(page: $page, perPage: $perPage) {
         pageInfo { total lastPage hasNextPage }
-        media(search: $search, sort: $sort, genre: $genre, type: ANIME, isAdult: false) {
+        media(search: $search, sort: $sort, genre: $genre, type: ANIME) {
           id
           idMal
           title { english romaji }
@@ -65,7 +65,7 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
     
     if mode == "search" and query:
         variables["search"] = query
-        variables["sort"] = ["POPULARITY_DESC"]
+        variables["sort"] = ["SEARCH_MATCH"]
     elif mode == "score" or mode == "top_rated":
         # Recency Tie-Breaker: Quality first, then Start Date (Newest first)
         variables["sort"] = ["SCORE_DESC", "START_DATE_DESC"]
@@ -468,6 +468,13 @@ def fetch_anilist_media(media_id, is_mal=True):
                 } for e in item['relations']['edges']
             ]
         }
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 404:
+            # Expected if AniList does not have this ID mapped
+            pass
+        else:
+            print(f"[AniList media detail HTTP ERROR]: {e.response.status_code}")
+        return None
     except Exception as e:
         print(f"[AniList media detail ERROR]: {e}")
         return None

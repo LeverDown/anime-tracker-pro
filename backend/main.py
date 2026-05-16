@@ -65,7 +65,25 @@ else:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup Logic ---
-    db.init_db()
+    
+    # 1. Environment Validation
+    REQUIRED_ENV_VARS = ["DATABASE_URL", "JWT_SECRET"]
+    missing_vars = [var for var in REQUIRED_ENV_VARS if not os.getenv(var)]
+    if missing_vars:
+        raise RuntimeError(f"CRITICAL_FAILURE // Missing required environment variables: {', '.join(missing_vars)}")
+
+    # 2. Database Migrations
+    try:
+        import alembic.config
+        import alembic.command
+        alembic_cfg = alembic.config.Config(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic.ini"))
+        alembic_cfg.set_main_option("script_location", os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic"))
+        alembic.command.upgrade(alembic_cfg, "head")
+        print("[System] Database migrations applied successfully.")
+    except Exception as e:
+        print(f"[System] Alembic upgrade warning: {e}")
+        # Fallback for dev environments without migrations setup
+        db.init_db()
     
     yield
     
@@ -90,6 +108,10 @@ app.include_router(events_router, prefix="/api/events")
 @app.get("//")
 async def root():
     return {"message": "SENTRY_PURGE_COMPLETE_BACKEND_READY_001"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
 @app.post("/api/upload")
 async def upload_image(file: UploadFile = File(...)):
@@ -117,9 +139,10 @@ async def validation_exception_handler(request, exc):
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 # Setup CORS for Next.js frontend
+frontend_origin = os.getenv("CORS_ORIGIN", "http://localhost:3000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[frontend_origin, "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -129,6 +152,7 @@ app.add_middleware(
 from core.security import create_access_token, create_refresh_token, get_current_user, verify_password
 import jwt
 from core.security import SECRET_KEY, ALGORITHM
+from utils.cache_manager import cache
 
 # --- Auth Models ---
 class UserRegister(BaseModel):
@@ -140,8 +164,7 @@ class UserLogin(BaseModel):
     username: str
     password: str
 
-# Track failed login attempts for Sentry alerts (Phase 1)
-failed_login_attempts = {}
+# Track failed login attempts via Redis cache manager
 
 @app.post("/api/auth/register")
 @limiter.limit("5/minute")
@@ -162,15 +185,15 @@ def login(user: UserLogin, request: Request, response: Response):
         
         # SEC-004: Automatic Upgrade from Legacy SHA-256
         if needs_rehash:
-            from core.security import get_password_hash
-            new_hash = get_password_hash(user.password)
+            from core.security import hash_password
+            new_hash = hash_password(user.password)
             with db.get_db() as session:
                 session.query(db.User).filter(db.User.username == user.username).update({"password": new_hash})
                 session.commit()
             sentry_sdk.capture_message(f"Security: Upgraded legacy hash for user {user.username}", level="info")
 
         # Reset counter on success
-        failed_login_attempts.pop(user.username, None)
+        cache.delete(f"login_fails:{user.username}")
         access_token = create_access_token(data={"sub": user.username})
         refresh_token = create_refresh_token(data={"sub": user.username})
         
@@ -181,9 +204,10 @@ def login(user: UserLogin, request: Request, response: Response):
         return {"message": "Login successful", "username": user.username, "access_token": access_token, "token_type": "bearer"}
     
     print(f"!!! [AUTH] Login FAILED for user: {user.username} !!!")
-    # Track failed attempts
-    attempts = failed_login_attempts.get(user.username, 0) + 1
-    failed_login_attempts[user.username] = attempts
+    # Track failed attempts via Redis
+    attempts = cache.get(f"login_fails:{user.username}") or 0
+    attempts += 1
+    cache.set(f"login_fails:{user.username}", attempts, ttl=3600)
     
     if attempts >= 5:
         sentry_sdk.capture_message(
@@ -198,6 +222,9 @@ def refresh_token(request: Request, response: Response):
     token = request.cookies.get("refresh_token")
     if not token:
         raise HTTPException(status_code=401, detail="Refresh token missing")
+        
+    if cache.get(f"blocked_token:{token}"):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
         
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -222,6 +249,18 @@ def refresh_token(request: Request, response: Response):
     except Exception as e:
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response, current_user: str = Depends(get_current_user)):
+    refresh_token = request.cookies.get("refresh_token")
+    if refresh_token:
+        # Blocklist the token in Redis to prevent reuse
+        cache.set(f"blocked_token:{refresh_token}", "revoked", ttl=7*24*3600)
+    
+    # Securely clear cookies
+    response.delete_cookie(key="access_token", path="/", httponly=True, secure=IS_PROD, samesite="lax")
+    response.delete_cookie(key="refresh_token", path="/", httponly=True, secure=IS_PROD, samesite="lax")
+    return {"message": "Logged out securely"}
 
 # --- User Profile ---
 class ThemeUpdate(BaseModel):
@@ -436,7 +475,7 @@ def get_collection(username: str, status_filter: str = "All", current_user: str 
     return {"data": result}
 
 @app.post("/api/collection")
-async def save_collection(data: AnimeSave, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+def save_collection(data: AnimeSave, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
     verify_owner(current_user, data.username)
     high_res_url = upscale_image_url(data.image_url)
     db.save_anime_to_db(data.username, data.anime_id, data.title, high_res_url, 
@@ -448,11 +487,11 @@ async def save_collection(data: AnimeSave, background_tasks: BackgroundTasks, cu
 class ProgressUpdate(BaseModel):
     username: str
     anime_id: int
-    seasons_json: str
+    seasons_json: Optional[str] = None
     episode_progress: int = 0
 
 @app.post("/api/collection/progress")
-async def update_progress(data: ProgressUpdate, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
+def update_progress(data: ProgressUpdate, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user)):
     verify_owner(current_user, data.username)
     # 1. Update seasons_json (legacy compatibility)
     db.update_seasons_json(data.username, data.anime_id, data.seasons_json)
@@ -472,11 +511,10 @@ async def update_progress(data: ProgressUpdate, background_tasks: BackgroundTask
             text("""
                 UPDATE user_anime_list 
                 SET episodes_watched = :p, 
-                    status = CASE WHEN :p >= :e THEN 'Completed' ELSE status END,
-                    updated_at = :now
-                WHERE user_id = :u AND anime_id = :aid
+                    status = CASE WHEN :p >= :e THEN 'Completed' ELSE status END
+                WHERE LOWER(user_id) = LOWER(:u) AND anime_id = :aid
             """),
-            {"p": data.episode_progress, "e": anime.episodes or 9999, "u": data.username, "aid": anime.id, "now": datetime.utcnow()}
+            {"p": data.episode_progress, "e": anime.episodes or 9999, "u": data.username, "aid": anime.id}
         )
 
         # Log to watch_history
@@ -493,10 +531,13 @@ class ReviewUpdate(BaseModel):
     anime_id: int
     review: str
 
+import html
+
 @app.post("/api/collection/review")
 def update_review(data: ReviewUpdate, current_user: str = Depends(get_current_user)):
     verify_owner(current_user, data.username)
-    db.update_review(data.username, data.anime_id, data.review)
+    safe_review = html.escape(data.review) if data.review else ""
+    db.update_review(data.username, data.anime_id, safe_review)
     return {"message": "Review updated"}
 
 class ScoreUpdate(BaseModel):
@@ -520,7 +561,7 @@ def update_score(data: ScoreUpdate, current_user: str = Depends(get_current_user
             text("""
                 UPDATE user_anime_list 
                 SET score = :score 
-                WHERE user_id = :uid AND anime_id = :aid
+                WHERE LOWER(user_id) = LOWER(:uid) AND anime_id = :aid
             """),
             {"score": data.score, "uid": data.username, "aid": anime_uuid}
         )
@@ -591,7 +632,7 @@ def get_user_stats(username: str, current_user: str = Depends(get_current_user))
     }
 
 @app.delete("/api/collection/purge")
-async def purge_all_data(username: str, current_user: str = Depends(get_current_user)):
+def purge_all_data(username: str, current_user: str = Depends(get_current_user)):
     verify_owner(current_user, username)
     db.purge_user_data(username)
     return {"message": "PURGE_COMPLETE // ALL DATA WIPED"}
@@ -820,9 +861,13 @@ class CustomFieldsUpdate(BaseModel):
     score_sound: Optional[float] = None
 
 @app.post("/api/collection/custom")
-def update_custom_fields(data: CustomFieldsUpdate):
-    db.update_custom_fields(data.username, data.anime_id, data.custom_tags,
-                            data.private_notes, data.score_story, data.score_art, data.score_sound)
+def update_custom_fields(data: CustomFieldsUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
+    import html
+    safe_tags = html.escape(data.custom_tags) if data.custom_tags else None
+    safe_notes = html.escape(data.private_notes) if data.private_notes else None
+    db.update_custom_fields(data.username, data.anime_id, safe_tags,
+                            safe_notes, data.score_story, data.score_art, data.score_sound)
     return {"message": "Custom fields updated"}
 
 # ── Global Theme ───────────────────────────────────────────────────────────────
@@ -903,7 +948,9 @@ import xml.etree.ElementTree as ET
 
 from fastapi import BackgroundTasks
 
-async def fetch_missing_metadata_task(username: str):
+import time
+
+def fetch_missing_metadata_task(username: str):
     """Background worker to fetch images/genres for imported MAL entries."""
     with db.get_db() as conn:
         # We look for anime records linked to this user that lack an image_url
@@ -923,28 +970,52 @@ async def fetch_missing_metadata_task(username: str):
     print(f"[Metadata Task] Syncing {len(missing)} titles for {username}...")
     for aid, mid, title, anime_uuid in missing:
         try:
-            # Try to fetch from AniList
-            results, _ = al.fetch_anilist(query=title, mode="search", perPage=1)
-            if results:
-                best_match = results[0]
-                # Update Anime DB (Master record)
-                with db.get_db() as session:
-                    session.execute(
-                        text("""
-                            UPDATE anime 
-                            SET image_url = :img, genres = CAST(:genres AS JSON)
-                            WHERE id = :id
-                        """),
-                        {
-                            "img": best_match['images']['jpg']['image_url'],
-                            "genres": json.dumps(best_match['genres']),
-                            "id": anime_uuid
-                        }
-                    )
-                    session.commit()
+            # Try to fetch exact match from AniList using MAL ID
+            best_match = al.fetch_anilist_media(mid, is_mal=True)
             
-            # Sleep slightly to avoid spamming
-            await asyncio.sleep(0.5) 
+            img_url = None
+            genres_json = "[]"
+            anilist_id = None
+            
+            if best_match:
+                img_url = best_match['images']['jpg']['image_url']
+                genres_json = json.dumps(best_match['genres'])
+                anilist_id = best_match.get('idAniList')
+            else:
+                # Fallback to Jikan (MAL API) if AniList doesn't have this ID mapped
+                try:
+                    import requests
+                    r = requests.get(f"https://api.jikan.moe/v4/anime/{mid}", timeout=10)
+                    if r.status_code == 200:
+                        j_data = r.json().get('data', {})
+                        img_url = j_data.get('images', {}).get('jpg', {}).get('large_image_url')
+                        genres_json = json.dumps([{"name": g.get("name")} for g in j_data.get('genres', [])])
+                except Exception as je:
+                    print(f"Jikan fallback failed for {title}: {je}")
+            
+            # If both fail, mark as 'not_found' to prevent infinite retries
+            if not img_url:
+                img_url = "not_found"
+                
+            # Update Anime DB (Master record)
+            with db.get_db() as session:
+                session.execute(
+                    text("""
+                        UPDATE anime 
+                        SET image_url = :img, genres = CAST(:genres AS JSON), anilist_id = COALESCE(:anilist_id, anilist_id)
+                        WHERE id = :id
+                    """),
+                    {
+                        "img": img_url,
+                        "genres": genres_json,
+                        "anilist_id": anilist_id,
+                        "id": anime_uuid
+                    }
+                )
+                session.commit()
+            
+            # Sleep adequately to prevent 429 Too Many Requests
+            time.sleep(2.0) 
         except Exception as e:
             print(f"Failed to sync metadata for {title}: {e}")
 
@@ -963,10 +1034,16 @@ async def import_mal(username: str, background_tasks: BackgroundTasks, current_u
         "Plan to Watch": "Plan to Watch",
         "Dropped": "Dropped",
         "On-Hold": "On Hold",
+        "On Hold": "On Hold",
+        "1": "Watching",
+        "2": "Completed",
+        "3": "On Hold",
+        "4": "Dropped",
+        "6": "Plan to Watch"
     }
 
     import_list = []
-    for anime in root.findall('anime'):
+    for anime in root.iter('anime'):
         try:
             title = anime.findtext('series_title') or ''
             mal_id = int(anime.findtext('series_animedb_id') or 0)
@@ -1020,7 +1097,97 @@ async def sync_anilist(username: str, background_tasks: BackgroundTasks, current
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def execute_anilist_sync(username: str):
+@app.post("/api/import/animeschedule")
+async def import_animeschedule(username: str, background_tasks: BackgroundTasks, current_user: str = Depends(get_current_user), file: UploadFile = File(...)):
+    verify_owner(current_user, username)
+    content = await file.read()
+    try:
+        import json
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="INVALID_JSON_STREAM // CORRUPTED_FILE")
+
+    try:
+        # Check for AnimeSchedule GDPR Export Format
+        if isinstance(data, dict):
+            if "animelist" in data and "shows" in data["animelist"]:
+                shows_dict = data["animelist"]["shows"]
+                new_data = []
+                for route, show_data in shows_dict.items():
+                    # Format 'shingeki-no-kyojin' -> 'Shingeki No Kyojin'
+                    show_data["title"] = route.replace("-", " ").title()
+                    # Generate a reliable pseudo-ID for Postgres conflict checking
+                    import hashlib
+                    pseudo_id = int(hashlib.md5(route.encode()).hexdigest(), 16) % (10**8)
+                    show_data["idMal"] = pseudo_id
+                    new_data.append(show_data)
+                data = new_data
+            elif "entries" in data: data = data["entries"]
+            elif "anime" in data: data = data["anime"]
+            elif "items" in data: data = data["items"]
+            else:
+                for v in data.values():
+                    if isinstance(v, list):
+                        data = v
+                        break
+        
+        if not isinstance(data, list):
+            raise HTTPException(status_code=400, detail="UNSUPPORTED_JSON_STRUCTURE")
+
+        # Map AnimeSchedule statuses to RoninHub internal schema
+        STATUS_MAP = {
+            "watching": "Watching",
+            "current": "Watching",
+            "completed": "Completed",
+            "planned": "Plan to Watch",
+            "planning": "Plan to Watch",
+            "dropped": "Dropped",
+            "on_hold": "On Hold",
+            "on hold": "On Hold",
+            "paused": "On Hold",
+            "to-watch": "Plan to Watch",
+            "to_watch": "Plan to Watch",
+            "plan_to_watch": "Plan to Watch"
+        }
+
+        import_list = []
+        for item in data:
+            if not isinstance(item, dict): continue
+            
+            # Handle AniList-style nested media object or flat structure
+            media = item.get('media', {})
+            mal_id = item.get('mal_id') or item.get('idMal') or item.get('id') or media.get('idMal') or media.get('id')
+            if not mal_id: continue 
+            
+            title = item.get('title') or media.get('title', {}).get('romaji') or media.get('title', {}).get('english') or 'Unknown Title'
+            status_raw = str(item.get('status') or item.get('listStatus') or item.get('my_status', 'planned')).lower()
+            
+            import_list.append({
+                "anime_id": mal_id,
+                "title": title,
+                "image_url": item.get('image_url') or media.get('coverImage', {}).get('extraLarge') or "", 
+                "status": STATUS_MAP.get(status_raw, 'Plan to Watch'),
+                "score": float(item.get('score') or item.get('manualScore') or item.get('averageScore') or 0),
+                "episodes": int(item.get('episodes') or media.get('episodes') or 0),
+                "progress": int(item.get('episodes_watched') or item.get('episodesSeen') or item.get('progress') or 0),
+                "idMal": mal_id
+            })
+
+        if import_list:
+            stats = db.batch_import_anime(username, import_list)
+            background_tasks.add_task(fetch_missing_metadata_task, username)
+            return {
+                "message": "IMPORT_SUCCESS // METADATA_SYNC_QUEUED",
+                "inserted": stats['inserted'],
+                "updated": stats['updated']
+            }
+
+        return {"message": "NO_COMPATIBLE_ENTRIES_FOUND"}
+    except Exception as e:
+        print(f"[Import Error]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"INTERNAL_PARSER_ERROR: {str(e)}")
+
+def execute_anilist_sync(username: str):
     """Actual worker logic for AniList sync."""
     print(f"[Sync] Starting AniList sync for {username}...")
     import anilist as al
@@ -1030,7 +1197,7 @@ async def execute_anilist_sync(username: str):
     if data_list:
         db.batch_import_anime(username, data_list)
         # Fetch metadata for any missing ones
-        await fetch_missing_metadata_task(username)
+        fetch_missing_metadata_task(username)
         print(f"[Sync] AniList sync complete for {username}")
     else:
         print(f"[Sync] No data found or error for {username}")

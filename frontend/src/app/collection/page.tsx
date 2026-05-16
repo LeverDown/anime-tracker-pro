@@ -60,6 +60,7 @@ export default function CollectionPage(): JSX.Element {
   const [expandedStack, setExpandedStack] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [genreFilter, setGenreFilter] = useState<string>('ALL');
+  const [localProgress, setLocalProgress] = useState<Record<number, number>>({});
   const [importing, setImporting] = useState<boolean>(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -390,7 +391,7 @@ export default function CollectionPage(): JSX.Element {
             const latest = items[items.length - 1];
             const isExpanded = expandedStack === series;
 
-            const totalProg = items.reduce((sum, item) => sum + (item.progress || 0), 0);
+            const totalProg = items.reduce((sum, item) => sum + (localProgress[item.anime_id] !== undefined ? localProgress[item.anime_id] : (item.progress || 0)), 0);
             const totalEpsCount = items.reduce((sum, item) => sum + (item.episodes || 0), 0);
             const progressPercent = Math.min(100, (totalProg / (totalEpsCount || 1)) * 100);
 
@@ -476,8 +477,13 @@ export default function CollectionPage(): JSX.Element {
                             type="range" 
                             min="0" 
                             max={latest.episodes || 12} 
-                            value={latest.progress}
-                            onChange={(e) => handleProgressUpdate(latest.anime_id, parseInt(e.target.value))}
+                            value={localProgress[latest.anime_id] ?? (latest.progress || 0)}
+                            onChange={(e) => setLocalProgress(prev => ({ ...prev, [latest.anime_id]: parseInt(e.target.value) }))}
+                            onPointerUp={() => {
+                              if (localProgress[latest.anime_id] !== undefined) {
+                                handleProgressUpdate(latest.anime_id, localProgress[latest.anime_id]);
+                              }
+                            }}
                             className={styles.episodeSlider}
                           />
                         </div>

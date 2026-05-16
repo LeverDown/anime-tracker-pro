@@ -1,6 +1,7 @@
 import os
 import json
 import uuid
+import sentry_sdk
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Boolean, func, text
 from sqlalchemy.ext.declarative import declarative_base
@@ -87,6 +88,13 @@ class ProviderCache(Base):
     fetched_at = Column(DateTime, server_default=func.now())
     ttl_seconds = Column(Integer, default=3600)
 
+class WatchHistory(Base):
+    __tablename__ = "watch_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    username = Column(String, ForeignKey("users.username"))
+    anime_id = Column(UUID(as_uuid=True), ForeignKey("anime.id"))
+    episode_num = Column(Integer)
+    timestamp = Column(DateTime, server_default=func.now())
 
 @contextmanager
 def get_db():
@@ -288,9 +296,11 @@ def update_seasons_json(username, anime_id, seasons_json):
 
 def log_watch_history(username, anime_id, episode):
     with get_db() as session:
-        new_entry = WatchHistory(username=username, anime_id=anime_id, episode=episode)
-        session.add(new_entry)
-        session.commit()
+        anime_uuid = resolve_anime_uuid(session, anime_id)
+        if anime_uuid:
+            new_entry = WatchHistory(username=username, anime_id=anime_uuid, episode_num=episode)
+            session.add(new_entry)
+            session.commit()
 
 
 
@@ -459,7 +469,7 @@ def batch_import_anime(username, data_list):
                 # Let's delete existing links and bulk insert.
                 anime_ids = [p['anime_id'] for p in list_params]
                 session.execute(text("""
-                    DELETE FROM user_anime_list WHERE user_id = :user_id AND anime_id = ANY(:anime_ids)
+                    DELETE FROM user_anime_list WHERE user_id = :user_id AND anime_id = ANY(CAST(:anime_ids AS uuid[]))
                 """), {"user_id": username, "anime_ids": anime_ids})
                 
                 session.execute(text("""

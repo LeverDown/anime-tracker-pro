@@ -185,7 +185,7 @@ export default function SettingsPage() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            style={{ padding: '0 20px', marginTop: '8px', overflow: 'hidden' }}
+            style={{ padding: '0 20px', marginTop: '8px', overflow: 'hidden' } as React.CSSProperties}
           >
             <div style={{
               background: 'rgba(255,45,85,0.08)',
