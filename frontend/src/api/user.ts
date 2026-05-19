@@ -43,3 +43,13 @@ export async function getUserThemeSelection(username: string) {
   const response = await api.get('/user/theme/selection', { params: { username } });
   return response.data;
 }
+
+/**
+ * Uploads an image file (pfp or banner) to the server.
+ */
+export async function uploadImage(file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post('/upload', formData);
+  return response.data;
+}

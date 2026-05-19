@@ -9,8 +9,19 @@ from slowapi.errors import RateLimitExceeded
 
 try:
     from dotenv import load_dotenv
-    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
-    load_dotenv(dotenv_path=env_path)
+    # Check current directory (backend/) then parent directory (root)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    
+    env_paths = [
+        os.path.join(current_dir, '.env'),
+        os.path.join(parent_dir, '.env')
+    ]
+    
+    for path in env_paths:
+        if os.path.exists(path):
+            load_dotenv(dotenv_path=path)
+            break
 except ImportError:
     pass
 
@@ -37,6 +48,7 @@ import anilist as al
 from core.metadata_engine import MetadataEngine
 from core.security import get_current_user
 from utils.image_utils import upscale_image_url
+from utils.rate_limiter import anilist_limiter  # Phase 2: shared rate limiter
 
 IS_PROD = os.getenv("NODE_ENV") == "production"
 print(f"!!! [SYSTEM] Running in {'PRODUCTION' if IS_PROD else 'DEVELOPMENT'} mode (Cookie Secure: {IS_PROD}) !!!")
@@ -92,16 +104,15 @@ async def lifespan(app: FastAPI):
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="Anime Tracker API", lifespan=lifespan)
+from fastapi.staticfiles import StaticFiles
+import os
+
+UPLOAD_DIR = "uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-# Ensure uploads directory exists
-UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
-
-# Mount static files to serve uploaded images
-app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 app.include_router(events_router, prefix="/api/events")
  
 @app.get("/")
@@ -113,20 +124,50 @@ async def root():
 def health_check():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
 
+
+# ── Phase 1: Internal API-health metrics endpoint ─────────────────────────────
+@app.get("/internal/api-health")
+def api_health(request: Request):
+    """Internal metrics endpoint — protected by INTERNAL_API_KEY env var."""
+    expected_key = os.getenv("INTERNAL_API_KEY", "")
+    provided_key = request.headers.get("X-Internal-Api-Key", "")
+    if not expected_key or provided_key != expected_key:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from utils.fallback_logger import (
+        parse_fallback_log_last_hour,
+        get_active_degradation_alerts,
+    )
+
+    log_summary = parse_fallback_log_last_hour()
+    return {
+        "fallback_events_last_hour": log_summary["total"],
+        "fallback_breakdown": log_summary["breakdown"],
+        "degradation_alerts_active": get_active_degradation_alerts(),
+        "cache_hit_rate": "N/A",  # Extend here if instrumentation is added
+    }
+
 @app.post("/api/upload")
 async def upload_image(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
     
-    file_ext = os.path.splitext(file.filename)[1]
+    filename = file.filename or ""
+    file_ext = os.path.splitext(filename)[1].lower()
+    if file_ext not in {".jpg", ".jpeg", ".png", ".gif", ".webp"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
     new_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(UPLOAD_DIR, new_filename)
     
     with open(file_path, "wb") as f:
-        content = await file.read()
+        MAX_SIZE = 5 * 1024 * 1024
+        content = await file.read(MAX_SIZE + 1)
+        if len(content) > MAX_SIZE:
+            raise HTTPException(status_code=413, detail="Image must be under 5 MB")
         f.write(content)
     
-    return {"url": f"/uploads/{new_filename}"}
+    BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
+    return {"url": f"{BACKEND_BASE_URL}/uploads/{new_filename}"}
  
 
 from fastapi.exceptions import RequestValidationError
@@ -713,19 +754,32 @@ def get_anime_list(status: str, username: str = Depends(get_current_user)):
         "PAUSED": "On Hold"
     }
     db_status = status_map.get(status, status)
-    
+
     with db.get_db() as session:
+        # Phase 6: fetch user's title preference (default 'english')
+        user_obj = session.query(db.User).filter(func.lower(db.User.username) == func.lower(username)).first()
+        pref = (user_obj.title_preference if user_obj else None) or "english"
+
         results = session.query(db.UserAnimeList, db.Anime)\
             .join(db.Anime, db.UserAnimeList.anime_id == db.Anime.id)\
             .filter(func.lower(db.UserAnimeList.user_id) == func.lower(username))\
             .filter(db.UserAnimeList.status == db_status)\
             .all()
-            
+
+        from utils.title_utils import get_display_title
         return [
             {
-                "id": a.anilist_id or a.mal_id,
+                # Phase 3: namespaced key — never mix raw integers from different ID spaces
+                "id": f"anilist_{a.anilist_id}" if a.anilist_id else f"mal_{a.mal_id}",
                 "mal_id": a.mal_id,
                 "title": a.title_romaji,
+                # Phase 6: computed display title honouring user preference
+                "display_title": get_display_title(
+                    getattr(a, 'title_english', None),
+                    getattr(a, 'title_romaji', None),
+                    getattr(a, 'title_native', None),
+                    pref,
+                ),
                 "episodes": a.episodes or 0,
                 "watched_episodes": ul.episodes_watched or 0,
                 "format": a.format or "TV",
@@ -776,7 +830,8 @@ def update_status(id: int, data: StatusUpdate, username: str = Depends(get_curre
             
         ul, a = updated
         return {
-            "id": a.anilist_id or a.mal_id,
+            # Phase 3: namespaced key
+            "id": f"anilist_{a.anilist_id}" if a.anilist_id else f"mal_{a.mal_id}",
             "mal_id": a.mal_id,
             "title": a.title_romaji,
             "episodes": a.episodes or 0,
@@ -815,14 +870,19 @@ def update_preferences(data: PreferencesUpdate, username: str = Depends(get_curr
 
 @app.get("/api/anime/summary")
 def get_episode_summary(idMal: int, episode: int):
+    # Phase 4: 60min TTL for episode summaries — reduces Jikan load during AniList outages
+    cache_key = f"ep_summary:{idMal}:{episode}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
     try:
         r = requests.get(f"https://api.jikan.moe/v4/anime/{idMal}/episodes/{episode}", timeout=10)
         if r.status_code == 200:
             data = r.json().get('data', {})
             synopsis = data.get('synopsis')
-            if synopsis:
-                return {"synopsis": synopsis}
-            return {"synopsis": "No spoiler-free summary available for this episode."}
+            result = {"synopsis": synopsis} if synopsis else {"synopsis": "No spoiler-free summary available for this episode."}
+            cache.set(cache_key, result, ttl=3600)  # 60min: episode summaries
+            return result
         return {"synopsis": "Could not fetch summary from Jikan API."}
     except Exception as e:
         sentry_sdk.capture_exception(e)
@@ -871,21 +931,9 @@ def update_custom_fields(data: CustomFieldsUpdate, current_user: str = Depends(g
     return {"message": "Custom fields updated"}
 
 # ── Global Theme ───────────────────────────────────────────────────────────────
-@app.get("/api/user/theme")
-def get_user_theme(username: str):
-    return {"theme_url": db.get_user_theme(username)}
-
-class ThemeUpdate(BaseModel):
-    username: str
-    theme_url: str
-
-@app.post("/api/user/theme")
-def set_user_theme(data: ThemeUpdate):
-    db.set_user_theme(data.username, data.theme_url)
-    return {"message": "Theme updated"}
-
 @app.get("/api/user/theme/seasonal")
-def get_seasonal_toggle(username: str):
+def get_seasonal_toggle(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     return {"enabled": db.get_seasonal_theme_enabled(username)}
 
 class SeasonalToggleUpdate(BaseModel):
@@ -893,12 +941,14 @@ class SeasonalToggleUpdate(BaseModel):
     enabled: bool
 
 @app.post("/api/user/theme/seasonal")
-def set_seasonal_toggle(data: SeasonalToggleUpdate):
+def set_seasonal_toggle(data: SeasonalToggleUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.set_seasonal_theme_enabled(data.username, data.enabled)
     return {"message": "Seasonal theme preference updated"}
 
 @app.get("/api/user/theme/selection")
-def get_theme_selection(username: str):
+def get_theme_selection(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     return {"selection": db.get_custom_theme_selection(username)}
 
 class ThemeSelectionUpdate(BaseModel):
@@ -906,7 +956,8 @@ class ThemeSelectionUpdate(BaseModel):
     selection: str
 
 @app.post("/api/user/theme/selection")
-def set_theme_selection(data: ThemeSelectionUpdate):
+def set_theme_selection(data: ThemeSelectionUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.set_custom_theme_selection(data.username, data.selection)
     return {"message": "Theme selection updated"}
 
@@ -919,7 +970,8 @@ class ProfileUpdate(BaseModel):
     atmosphere_url: Optional[str] = None
 
 @app.post("/api/profile/update")
-def update_profile(data: ProfileUpdate):
+def update_profile(data: ProfileUpdate, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, data.username)
     db.update_user_profile(
         data.username, 
         banner_url=data.banner_url, 
@@ -931,7 +983,8 @@ def update_profile(data: ProfileUpdate):
 
 # ── Public Profile ─────────────────────────────────────────────────────────────
 @app.delete("/api/user/account")
-def delete_account(username: str):
+def delete_account(username: str, current_user: str = Depends(get_current_user)):
+    verify_owner(current_user, username)
     db.delete_user_account(username)
     return {"message": "IDENTITY_TERMINATED"}
 
@@ -970,6 +1023,8 @@ def fetch_missing_metadata_task(username: str):
     print(f"[Metadata Task] Syncing {len(missing)} titles for {username}...")
     for aid, mid, title, anime_uuid in missing:
         try:
+            # Phase 2: acquire a rate-limiter token instead of time.sleep(2.0)
+            anilist_limiter.acquire()
             # Try to fetch exact match from AniList using MAL ID
             best_match = al.fetch_anilist_media(mid, is_mal=True)
             
@@ -977,14 +1032,29 @@ def fetch_missing_metadata_task(username: str):
             genres_json = "[]"
             anilist_id = None
             
+            title_english_val = None
+            title_romaji_val = None
+            title_native_val = None
+            title_sort_val = None
+
             if best_match:
                 img_url = best_match['images']['jpg']['image_url']
                 genres_json = json.dumps(best_match['genres'])
                 anilist_id = best_match.get('idAniList')
+                
+                title_english_val = best_match.get('title_english')
+                title_romaji_val = best_match.get('title_romaji')
+                title_native_val = best_match.get('title_native')
+                if title_english_val or title_romaji_val:
+                    from utils.title_utils import compute_sort_title
+                    title_sort_val = compute_sort_title(title_english_val or title_romaji_val)
             else:
                 # Fallback to Jikan (MAL API) if AniList doesn't have this ID mapped
                 try:
                     import requests
+                    from utils.fallback_logger import log_fallback_event
+                    # Phase 1: log the fallback before calling Jikan
+                    log_fallback_event("fetch_missing_metadata_task", "no_anilist_match", mal_id=mid)
                     r = requests.get(f"https://api.jikan.moe/v4/anime/{mid}", timeout=10)
                     if r.status_code == 200:
                         j_data = r.json().get('data', {})
@@ -1002,13 +1072,23 @@ def fetch_missing_metadata_task(username: str):
                 session.execute(
                     text("""
                         UPDATE anime 
-                        SET image_url = :img, genres = CAST(:genres AS JSON), anilist_id = COALESCE(:anilist_id, anilist_id)
+                        SET image_url = :img, 
+                            genres = CAST(:genres AS JSON), 
+                            anilist_id = COALESCE(:anilist_id, anilist_id),
+                            title_english = COALESCE(:title_english, title_english),
+                            title_romaji = COALESCE(:title_romaji, title_romaji),
+                            title_native = COALESCE(:title_native, title_native),
+                            title_sort = COALESCE(:title_sort, title_sort)
                         WHERE id = :id
                     """),
                     {
                         "img": img_url,
                         "genres": genres_json,
                         "anilist_id": anilist_id,
+                        "title_english": title_english_val,
+                        "title_romaji": title_romaji_val,
+                        "title_native": title_native_val,
+                        "title_sort": title_sort_val,
                         "id": anime_uuid
                     }
                 )

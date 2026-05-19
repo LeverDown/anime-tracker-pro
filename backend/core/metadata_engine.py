@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from database import ProviderCache, Anime
 from anilist import fetch_anilist_media
+from utils.fallback_logger import log_fallback_event  # Phase 1
 
 class MetadataEngine:
     def __init__(self, db_session: Session):
@@ -25,7 +26,7 @@ class MetadataEngine:
             else:
                 # Delete expired cache
                 self.db.delete(cache_entry)
-                self.db.commit()
+                self.db.flush()
         return None
 
     def set_cached_provider_data(self, provider: str, external_id: str, payload: dict, ttl_seconds: int = 3600):
@@ -37,7 +38,7 @@ class MetadataEngine:
             ttl_seconds=ttl_seconds
         )
         self.db.add(new_cache)
-        self.db.commit()
+        self.db.flush()
 
     def fetch_jikan_media(self, media_id: int):
         try:
@@ -99,6 +100,11 @@ class MetadataEngine:
                 return result
                 
         except Exception as e:
+            # Phase 1: log AniList→Jikan fallback event
+            log_fallback_event(
+                "resolve_anime_details",
+                str(getattr(getattr(e, 'response', None), 'status_code', None) or type(e).__name__),
+            )
             sentry_sdk.capture_message(
                 f"Provider Failure: AniList failed for anime {media_id}. Error: {e}",
                 level="warning"
@@ -108,7 +114,8 @@ class MetadataEngine:
         try:
             j_data = self.fetch_jikan_media(media_id)
             if j_data:
-                self.set_cached_provider_data("jikan", str(media_id), j_data, ttl_seconds=3600)
+                # Phase 4: 30min TTL for Jikan cover/metadata fallback (stable data)
+                self.set_cached_provider_data("jikan", str(media_id), j_data, ttl_seconds=1800)
                 return j_data
         except HTTPException as he:
             # Re-raise 404 immediately

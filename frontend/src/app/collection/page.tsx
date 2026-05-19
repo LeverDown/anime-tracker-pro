@@ -42,6 +42,11 @@ const STATUS_MAP = [
   { id: 'Plan to Watch', label: 'PLAN TO WATCH', icon: <Clock size={16} />, color: 'var(--text-dim)' },
 ];
 
+const ALIAS_MAP: Record<string, string> = {
+  // Add canonical series alias mappings here as needed
+  // e.g. 'SHINGEKI NO KYOJIN': 'ATTACK ON TITAN',
+};
+
 /**
  * CollectionPage Protocol — v5.1 (Polymorphic MediaCard)
  * Standardizes the archive sector with the platform-wide MediaCard architecture.
@@ -65,6 +70,7 @@ export default function CollectionPage(): JSX.Element {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setMounted(true);
   }, []);
 
@@ -168,10 +174,15 @@ export default function CollectionPage(): JSX.Element {
       .filter(item => item.title.toLowerCase().includes(search.toLowerCase()))
       .filter(item => genreFilter === 'ALL' || (item.genres && item.genres.toLowerCase().includes(genreFilter.toLowerCase())));
 
-    const ALIAS_MAP: Record<string, string> = {};
-
-    return filtered.reduce((acc: Record<string, CollectionItem[]>, item) => {
-      let key = item.series_name && item.series_name !== item.title ? item.series_name : '';
+    const res = filtered.reduce((acc: Record<string, CollectionItem[]>, item) => {
+      let key = '';
+      if (item.series_name && item.series_name !== item.title) {
+        // Uppercase and strip any subtitle after a colon or dash to get the base key
+        key = item.series_name
+          .toUpperCase()
+          .split(/[:–—]|\s+-\s*|\s*-\s+/)[0]
+          .trim();
+      }
       if (!key) {
         // System-Wide Cleaning Engine: Recursive normalization
         let clean = item.title.toUpperCase();
@@ -184,12 +195,12 @@ export default function CollectionPage(): JSX.Element {
           .replace(/\s+\d+(ST|ND|RD|TH)?\s+SEASON/g, '');
         
         // 2. Split on primary separators (colon, dash-with-spaces, parens)
-        const titleParts = clean.split(/[:–—(]|\s+-\s+/);
+        const titleParts = clean.split(/[–—(]|\s+-\s*|\s*-\s+/);
         let base = titleParts[0].trim();
 
         // 3. Recursive trailing identifier removal (Digits and Roman Numerals)
         // This handles "Mob Psycho 100 II" -> "Mob Psycho 100" -> "Mob Psycho"
-        const idRegex = /\s+([IVXLCDM]+|\d+|[A-Z])$/;
+        const idRegex = /\s+(I{1,3}|IV|VI{0,3}|IX|XI{0,3}|XII|\d+)$/;
         while (idRegex.test(base)) {
           base = base.replace(idRegex, '').trim();
         }
@@ -205,11 +216,64 @@ export default function CollectionPage(): JSX.Element {
         key = item.title.toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim() || `ID-${item.anime_id}`;
       }
 
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(item);
+      // Final normalization: collapse multiple spaces and trim
+      // This prevents invisible whitespace variants from splitting groups
+      const normalizedKey = key.replace(/\s+/g, ' ').trim();
+
+      if (!acc[normalizedKey]) acc[normalizedKey] = [];
+      acc[normalizedKey].push(item);
       return acc;
-    }, {});
-  }, [collection, activeTab, search]);
+    }, {} as Record<string, CollectionItem[]>);
+
+    const romanToInt = (s: string): number => {
+      const map: Record<string, number> = {I:1,V:5,X:10,L:50,C:100,D:500,M:1000};
+      return [...s].reduce((acc, c, i, a) =>
+        map[a[i+1]] > map[c] ? acc - map[c] : acc + map[c], 0);
+    };
+
+    // Sort the seasons inside each stack sequentially (using smart season/part parsing and anime_id fallback)
+    Object.keys(res).forEach(key => {
+      res[key].sort((a, b) => {
+        const getScores = (item: CollectionItem) => {
+          const title = item.title.toUpperCase();
+          
+          // Match "SEASON X" or "XND SEASON"
+          let season = 1;
+          const seasonMatch = title.match(/SEASON\s+(\d+)/) || title.match(/(\d+)(ST|ND|RD|TH)\s+SEASON/);
+          if (seasonMatch) {
+            season = parseInt(seasonMatch[1]);
+          }
+          
+          const romanMatch = title.match(/\s+(I{1,3}|IV|VI{0,3}|IX|XI{0,3}|XII)$/);
+          if (!seasonMatch && romanMatch) {
+            season = romanToInt(romanMatch[1]);
+          }
+          
+          // Match "PART X" or "COUR X"
+          let part = 1;
+          const partMatch = title.match(/PART\s+(\d+)/) || title.match(/COUR\s+(\d+)/);
+          if (partMatch) {
+            part = parseInt(partMatch[1]);
+          }
+          
+          return { season, part };
+        };
+
+        const scoreA = getScores(a);
+        const scoreB = getScores(b);
+
+        if (scoreA.season !== scoreB.season) {
+          return scoreA.season - scoreB.season;
+        }
+        if (scoreA.part !== scoreB.part) {
+          return scoreA.part - scoreB.part;
+        }
+        return a.anime_id - b.anime_id;
+      });
+    });
+
+    return res;
+  }, [collection, activeTab, search, genreFilter]);
 
   const activeTabIndex = STATUS_MAP.findIndex(t => t.id === activeTab);
 
@@ -388,7 +452,7 @@ export default function CollectionPage(): JSX.Element {
       ) : (
         <div className={styles.collectionGrid}>
           {Object.entries(grouped).map(([series, items], idx) => {
-            const latest = items[items.length - 1];
+            const latest = items[0];
             const isExpanded = expandedStack === series;
 
             const totalProg = items.reduce((sum, item) => sum + (localProgress[item.anime_id] !== undefined ? localProgress[item.anime_id] : (item.progress || 0)), 0);
@@ -449,7 +513,7 @@ export default function CollectionPage(): JSX.Element {
                           }}
                         >
                           {items.length} SEASONS
-                          {isExpanded ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                          {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </span>
                       )}
                     </div>

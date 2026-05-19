@@ -27,12 +27,10 @@ async def sync_external_library(ctx, username: str, provider: str):
 async def dispatch_notification(ctx, username: str, message: str, anime_id: int):
     """
     Background task for notification distribution.
-    Ensures that real-time alerts don't block user interactions.
+    DEPRECATED: Notifications were removed during community social module teardown.
     """
-    from database import create_notification
     try:
-        create_notification(username, message, anime_id)
-        print(f"[WORKER] Notification dispatched to {username}: {message}")
+        print(f"[WORKER] Notification distribution is disabled. Recipient: {username}, Message: {message}")
         return True
     except Exception as e:
         sentry_sdk.capture_exception(e)

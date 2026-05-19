@@ -164,7 +164,7 @@ export default function SettingsPage() {
       }}>
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: 800, letterSpacing: '0.06em', color: 'var(--s-text-hi)', margin: 0 }}>
-            <span style={{ color: 'var(--s-accent)' }}>//</span> SYSTEM_SETTINGS
+            <span style={{ color: 'var(--s-accent)' }}>{"//"}</span> SYSTEM_SETTINGS
           </h1>
           <div style={{ fontSize: '11px', color: 'var(--s-text-lo)', letterSpacing: '0.12em', marginTop: '6px', fontWeight: 500 }}>
             USER_PREFERENCE_OVERRIDE // READY
@@ -237,6 +237,7 @@ export default function SettingsPage() {
               setVisibility={(v) => updateState({ profileVisibility: v })}
               activityFeed={state.activityFeed}
               setActivityFeed={(v) => updateState({ activityFeed: v })}
+              onProfileUpdate={(newProfile) => setState(prev => ({ ...prev, profile: newProfile }))}
             />
           </div>
           <div className={styles.grid3}>

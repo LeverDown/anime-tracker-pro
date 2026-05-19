@@ -58,21 +58,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }): JSX.Element
     hydrateSession();
   }, []);
 
-  const login = (username: string): void => {
+  const login = React.useCallback((username: string): void => {
     localStorage.setItem("username", username);
     setUser(username);
-  };
+  }, []);
 
-  const logout = (): void => {
+  const logout = React.useCallback((): void => {
     localStorage.removeItem("username");
     setUser(null);
     // Reset theme to default
     document.documentElement.style.setProperty('--primary-color', '#ff0055');
     document.documentElement.style.setProperty('--custom-bg', 'none');
-  };
+  }, []);
+
+  const value = React.useMemo(() => ({
+    user,
+    login,
+    logout,
+    loading
+  }), [user, loading, login, logout]);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,15 +1,23 @@
 "use client";
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { Visibility } from '@/types/settings';
 import { SpecRow, HUDToggle } from '@/components/UI';
+import { uploadImage, updateProfile, UserProfile } from '@/api/user';
+import { BACKEND_URL } from '@/api/client';
+
+export interface IdentityProfile extends UserProfile {
+  total_episodes?: number;
+  days_watched?: number;
+}
 
 interface IdentityModuleProps {
   username: string;
-  profile: any | null;
+  profile: IdentityProfile | null;
   visibility: Visibility;
   setVisibility: (v: Visibility) => void;
   activityFeed: boolean;
   setActivityFeed: (v: boolean) => void;
+  onProfileUpdate?: (profile: IdentityProfile) => void;
 }
 
 export const IdentityModule: React.FC<IdentityModuleProps> = ({
@@ -18,12 +26,14 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
   visibility,
   setVisibility,
   activityFeed,
-  setActivityFeed
+  setActivityFeed,
+  onProfileUpdate
 }) => {
   const bannerInputRef = useRef<HTMLInputElement>(null);
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(username);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   
   const stats = [
     { key: 'WATCHED', val: profile?.total_titles ?? '0', unit: 'series' },
@@ -31,6 +41,40 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
     { key: 'MEAN_SCORE', val: profile?.avg_score?.toFixed(1) ?? '0.0', unit: '' },
     { key: 'DAYS', val: profile?.days_watched ?? '0', unit: 'd' },
   ];
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>, field: 'pfp_url' | 'banner_url') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+
+    try {
+      if (!username) {
+        setUploadError("Session not ready. Please wait and try again.");
+        return;
+      }
+      const uploadRes = await uploadImage(file);
+      await updateProfile({
+        username,
+        [field]: uploadRes.url
+      });
+
+      if (onProfileUpdate && profile) {
+        onProfileUpdate({
+          ...profile,
+          [field]: uploadRes.url
+        });
+      }
+    } catch (err) {
+      console.error(`[IDENTITY_UPLOAD] Failed to upload ${field}:`, err);
+      setUploadError(
+        `Failed to update ${field === 'pfp_url' ? 'profile picture' : 'banner'}. Please try again.`
+      );
+    }
+  }, [username, profile, onProfileUpdate]);
+
+  const pfpSrc = profile?.pfp_url ? (profile.pfp_url.startsWith('/') ? `${BACKEND_URL}${profile.pfp_url}` : profile.pfp_url) : null;
+
   return (
     <section className="sector">
       <div className="sector-header">
@@ -50,7 +94,7 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
           <div style={{
           width: '52px',
           height: '52px',
-          background: profile?.pfp_url ? `url(${profile.pfp_url}) center/cover` : 'var(--s-accent)',
+          background: pfpSrc ? `url(${pfpSrc}) center/cover` : 'var(--s-accent)',
           fontSize: '22px',
           fontWeight: 800,
           display: 'flex',
@@ -60,7 +104,13 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
           color: 'var(--s-text-hi)'
         }}>
           {!profile?.pfp_url && username[0]?.toUpperCase()}
-          <input type="file" ref={pfpInputRef} style={{ display: 'none' }} accept="image/*" />
+          <input 
+            type="file" 
+            ref={pfpInputRef} 
+            style={{ display: 'none' }} 
+            accept="image/*" 
+            onChange={(e) => handleFileChange(e, 'pfp_url')}
+          />
           <div 
             onClick={() => pfpInputRef.current?.click()}
             style={{
@@ -111,7 +161,7 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
       }}>
         {stats.map(stat => (
           <div key={stat.key} style={{ background: 'var(--s-bg2)', padding: '12px 14px' }}>
-            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--s-text-lo)', letterSpacing: '0.1em', marginBottom: '4px' }}>{stat.key} //</div>
+            <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--s-text-lo)', letterSpacing: '0.1em', marginBottom: '4px' }}>{`${stat.key} //`}</div>
             <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--s-text-hi)' }}>
               {stat.val}
               <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--s-accent)', marginLeft: '4px' }}>{stat.unit}</span>
@@ -155,7 +205,7 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
           style={{
             width: '100%',
             height: '72px',
-            background: 'var(--s-bg)',
+            background: profile?.banner_url ? `url(${profile.banner_url.startsWith('/') ? `${BACKEND_URL}${profile.banner_url}` : profile.banner_url}) center/cover` : 'var(--s-bg)',
             border: '1px dashed var(--s-border)',
             display: 'flex',
             flexDirection: 'column',
@@ -167,11 +217,20 @@ export const IdentityModule: React.FC<IdentityModuleProps> = ({
             position: 'relative',
             overflow: 'hidden'
           }} className="banner-upload-hover">
-          <input type="file" ref={bannerInputRef} style={{ display: 'none' }} accept="image/*" />
-          <span style={{ fontSize: '24px', color: 'rgba(255,45,85,0.4)' }}>⬆</span>
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--s-text-md)' }}>IDENTITY_BANNER // DROP OR CLICK TO UPLOAD</div>
-          <div style={{ fontSize: '9px', color: 'var(--s-text-lo)' }}>RECOMMENDED: 1200×200px — PNG / JPG / WEBP</div>
+          <input 
+            type="file" 
+            ref={bannerInputRef} 
+            style={{ display: 'none' }} 
+            accept="image/*" 
+            onChange={(e) => handleFileChange(e, 'banner_url')}
+          />
+          <span style={{ fontSize: '24px', color: 'rgba(255,45,85,0.4)', textShadow: '0 0 8px rgba(0,0,0,0.5)', zIndex: 1 }}>⬆</span>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--s-text-hi)', textShadow: '0 0 4px rgba(0,0,0,0.8)', zIndex: 1 }}>IDENTITY_BANNER // DROP OR CLICK TO UPLOAD</div>
+          <div style={{ fontSize: '9px', color: 'var(--s-text-md)', textShadow: '0 0 4px rgba(0,0,0,0.8)', zIndex: 1 }}>RECOMMENDED: 1200×200px — PNG / JPG / WEBP</div>
         </div>
+        {uploadError && (
+          <p className="text-sm text-red-500 mt-2">{uploadError}</p>
+        )}
       </div>
     </section>
   );

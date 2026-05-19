@@ -7,8 +7,19 @@ from utils.cache_manager import cache
 from utils.schedule_utils import (
     get_utc_window, normalize_to_uif, AniListFetchError, JikanFetchError, ScheduleFetchError
 )
+from utils.fallback_logger import log_fallback_event
+from utils.rate_limiter import anilist_limiter
 
 logger = logging.getLogger(__name__)
+
+
+def _make_id(anilist_id, mal_id):
+    """Phase 3: Return a namespaced ID string to avoid React key collisions."""
+    if anilist_id:
+        return f"anilist_{anilist_id}"
+    if mal_id:
+        return f"mal_{mal_id}"
+    return None
 
 COMMON_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -87,6 +98,7 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
         return cached_data[0], cached_data[1] # Returns normalized, page_info
 
     try:
+        anilist_limiter.acquire()
         response = requests.post(url, json={'query': graph_query, 'variables': variables}, headers=COMMON_HEADERS, timeout=15)
         if response.status_code == 403 and "disabled" in response.text:
              raise Exception("AniList API Disabled")
@@ -109,9 +121,11 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
                 trailer_url = f"https://www.youtube.com/watch?v={item['trailer']['id']}"
 
             entry = {
-                'mal_id': item.get('idMal') or item['id'], 
+                'mal_id': item.get('idMal') or item['id'],
                 'idMal': item.get('idMal'),
                 'idAniList': item['id'],
+                # Phase 3: namespaced key prevents React key collisions across ID spaces
+                'aid': _make_id(item['id'], item.get('idMal')),
                 'title': title,
                 'images': {'jpg': {'image_url': item['coverImage']['extraLarge'], 'large_image_url': item['coverImage']['extraLarge']}},
                 'score': (item['averageScore'] / 10) if item['averageScore'] else 0,
@@ -129,6 +143,9 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
         cache.set(cache_key, result, ttl=3600)
         return result
     except Exception as e:
+        # Phase 1: log fallback event with the actual exception type as reason
+        _reason = str(getattr(getattr(e, 'response', None), 'status_code', None) or type(e).__name__)
+        log_fallback_event("fetch_anilist", _reason)
         print(f"[AniList fetch_anilist ERROR]: {e}. Attempting Jikan fallback...")
         try:
             # Fallback to Jikan (MAL) search
@@ -140,7 +157,7 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
             elif mode == "top":
                 jikan_url = f"https://api.jikan.moe/v4/top/anime"
                 params["filter"] = "bypopularity"
-            
+
             if genres and len(genres) > 0:
                 j_genres = [JIKAN_GENRE_MAP.get(g) for g in genres if JIKAN_GENRE_MAP.get(g)]
                 if j_genres:
@@ -150,18 +167,21 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
             res.raise_for_status()
             j_data = res.json()
             j_list = j_data.get('data', [])
-            
+
             normalized = []
             for item in j_list:
                 title = item.get('title_english') or item.get('title')
+                mid = item['mal_id']
                 normalized.append({
-                    'mal_id': item['mal_id'],
-                    'idMal': item['mal_id'],
+                    'mal_id': mid,
+                    'idMal': mid,
                     'idAniList': None,
+                    # Phase 3: namespaced key so frontend list keys never collide
+                    'aid': _make_id(None, mid),
                     'title': title,
                     'images': {
                         'jpg': {
-                            'image_url': item.get('images', {}).get('jpg', {}).get('large_image_url'), 
+                            'image_url': item.get('images', {}).get('jpg', {}).get('large_image_url'),
                             'large_image_url': item.get('images', {}).get('jpg', {}).get('large_image_url')
                         }
                     },
@@ -179,14 +199,14 @@ def fetch_anilist(query=None, mode="search", genres=None, page=1, perPage=50):
                 if item['mal_id'] not in seen_ids:
                     unique_normalized.append(item)
                     seen_ids.add(item['mal_id'])
-            
+
             result = unique_normalized, {
                 "total": j_data.get('pagination', {}).get('items', {}).get('total', 0),
                 "lastPage": j_data.get('pagination', {}).get('last_visible_page', 0),
                 "hasNextPage": j_data.get('pagination', {}).get('has_next_page', False)
             }
-            # Cache fallback for a short time (5 mins) to allow quick recovery
-            cache.set(cache_key, result, ttl=300)
+            # Phase 4: 10min TTL for search fallback — search results should refresh frequently
+            cache.set(cache_key, result, ttl=600)
             return result
         except Exception as je:
             print(f"[Jikan fallback ERROR]: {je}")
@@ -223,6 +243,7 @@ def fetch_from_anilist(start_unix: int, end_unix: int) -> list[dict]:
     while page <= 10:
         variables = {'start': start_unix, 'end': end_unix, 'page': page}
         try:
+            anilist_limiter.acquire()
             response = requests.post(url, json={'query': query, 'variables': variables}, headers=COMMON_HEADERS, timeout=timeout_sec)
             if response.status_code != 200:
                 raise AniListFetchError(f"AniList HTTP Error", status_code=response.status_code)
@@ -288,15 +309,18 @@ def fetch_airing_schedule(day_name: str, user_timezone: str) -> list[dict]:
     try:
         raw = fetch_from_anilist(start, end)
         normalized = normalize_to_uif("anilist", raw)
-        cache.set(cache_key, normalized, ttl=3600)
+        cache.set(cache_key, normalized, ttl=3600)  # 1h: AniList volatile data
         return normalized
     except AniListFetchError as e:
+        # Phase 1: log the fallback before switching to Jikan
+        log_fallback_event("fetch_airing_schedule", str(getattr(e, 'status_code', None) or type(e).__name__))
         logger.error(f"AniList failed, trying Jikan fallback: {e}")
-        
+
     try:
         raw = fetch_from_jikan(day_name)
         normalized = normalize_to_uif("jikan", raw)
-        cache.set(cache_key, normalized, ttl=1800)
+        # Phase 4: 15min for airing schedule fallback — more time-sensitive
+        cache.set(cache_key, normalized, ttl=900)
         return normalized
     except JikanFetchError as e:
         logger.error(f"Jikan failed: {e}")
@@ -397,6 +421,7 @@ def fetch_anilist_media(media_id, is_mal=True):
     }}
     """
     try:
+        anilist_limiter.acquire()
         response = requests.post(url, json={'query': query, 'variables': {'id': int(media_id)}}, headers=COMMON_HEADERS, timeout=15)
         if response.status_code == 403 and "disabled" in response.text:
              raise Exception("AniList API Disabled")
@@ -418,6 +443,8 @@ def fetch_anilist_media(media_id, is_mal=True):
             'idAniList': item['id'],
             'title': title,
             'title_english': item['title']['english'],
+            'title_romaji': item['title']['romaji'],
+            'title_native': item['title']['native'],
             'title_japanese': item['title']['native'],
             'synopsis': desc,
             'images': {'jpg': {'image_url': item['coverImage']['extraLarge'], 'large_image_url': item['coverImage']['extraLarge']}},
@@ -505,6 +532,7 @@ def fetch_anilist_relations(id_mal):
     }
     """
     try:
+        anilist_limiter.acquire()
         res = requests.post(url, json={'query': query, 'variables': {'id': id_mal}}, headers=COMMON_HEADERS, timeout=10)
         if res.status_code == 403 and "disabled" in res.text:
              raise Exception("AniList API Disabled")
@@ -556,6 +584,7 @@ def fetch_seasonal_intel(year: int, season: str, page: int = 1) -> dict:
     timeout_sec = int(os.getenv("ANILIST_REQUEST_TIMEOUT_MS", 8000)) / 1000.0
 
     try:
+        anilist_limiter.acquire()
         r = requests.post(url, json={'query': q, 'variables': {'season': season.upper(), 'year': year, 'page': page}}, headers=COMMON_HEADERS, timeout=timeout_sec)
         if r.status_code == 429 or r.status_code >= 500:
              raise AniListFetchError(f"AniList returned {r.status_code}", status_code=r.status_code)
@@ -572,6 +601,9 @@ def fetch_seasonal_intel(year: int, season: str, page: int = 1) -> dict:
         cache.set(cache_key, result, ttl=21600) # 6 hours
         return result
     except Exception as e:
+        # Phase 1: log before switching to Jikan
+        _reason = str(getattr(getattr(e, 'response', None), 'status_code', None) or type(e).__name__)
+        log_fallback_event("fetch_seasonal_intel", _reason)
         logger.error(f"AniList seasonal failed, trying Jikan fallback: {e}")
         try:
             j_url = f"https://api.jikan.moe/v4/seasons/{year}/{season.lower()}"
@@ -580,12 +612,13 @@ def fetch_seasonal_intel(year: int, season: str, page: int = 1) -> dict:
             r.raise_for_status()
             j_data = r.json()
             media_list = j_data.get('data', [])
-            
+
             normalized = normalize_to_uif("jikan", media_list)
             has_next = j_data.get('pagination', {}).get('has_next_page', False)
             result = {"data": normalized, "page": page, "has_next": has_next, "source": "jikan"}
-            
-            cache.set(cache_key, result, ttl=300) # Short cache for fallback
+
+            # Phase 4: 30min for stable seasonal metadata — reduces Jikan load during AniList outages
+            cache.set(cache_key, result, ttl=1800)
             return result
         except Exception as je:
             logger.error(f"Jikan seasonal fallback failed: {je}")
@@ -623,6 +656,7 @@ def fetch_anilist_top(page: int = 1, perPage: int = 50, genre: str = None, year:
     }
     '''
     try:
+        anilist_limiter.acquire()
         r = requests.post(url, json={'query': q, 'variables': {'page': page, 'perPage': perPage, 'genre': genre, 'year': year}}, headers=COMMON_HEADERS, timeout=15)
         if r.status_code == 403 and "disabled" in r.text:
              raise Exception("AniList API Disabled")
@@ -654,6 +688,9 @@ def fetch_anilist_top(page: int = 1, perPage: int = 50, genre: str = None, year:
         cache.set(cache_key, result, ttl=43200) # 12 hours
         return result
     except Exception as e:
+        # Phase 1: log before switching to Jikan
+        _reason = str(getattr(getattr(e, 'response', None), 'status_code', None) or type(e).__name__)
+        log_fallback_event("fetch_anilist_top", _reason)
         print(f"[AniList top ERROR]: {e}. Attempting Jikan fallback...")
         try:
             j_url = f"https://api.jikan.moe/v4/top/anime"
@@ -661,13 +698,16 @@ def fetch_anilist_top(page: int = 1, perPage: int = 50, genre: str = None, year:
             r.raise_for_status()
             j_data = r.json()
             media_list = j_data.get('data', [])
-            
+
             normalized = []
             for item in media_list:
+                mid = item['mal_id']
                 normalized.append({
-                    'mal_id': item['mal_id'],
-                    'idMal': item['mal_id'],
+                    'mal_id': mid,
+                    'idMal': mid,
                     'idAniList': None,
+                    # Phase 3: namespaced key
+                    'aid': _make_id(None, mid),
                     'title': item.get('title_english') or item.get('title'),
                     'images': {'jpg': {'image_url': item['images']['jpg']['large_image_url'], 'large_image_url': item['images']['jpg']['large_image_url']}},
                     'score': item.get('score') or 0,
@@ -681,7 +721,7 @@ def fetch_anilist_top(page: int = 1, perPage: int = 50, genre: str = None, year:
                     'synopsis': item.get('synopsis', ''),
                     'source_provider': 'jikan'
                 })
-            
+
             # De-duplicate by mal_id to prevent React key collisions
             seen_ids = set()
             unique_normalized = []
@@ -691,7 +731,8 @@ def fetch_anilist_top(page: int = 1, perPage: int = 50, genre: str = None, year:
                     seen_ids.add(item['mal_id'])
 
             result = unique_normalized, {"hasNextPage": j_data.get('pagination', {}).get('has_next_page', False), "lastPage": j_data.get('pagination', {}).get('last_visible_page', 1)}
-            cache.set(cache_key, result, ttl=300) # Short cache for fallback
+            # Phase 4: 30min for cover images, studios, basic metadata (stable data)
+            cache.set(cache_key, result, ttl=1800)
             return result
         except Exception as je:
             print(f"[Jikan top fallback ERROR]: {je}")
@@ -715,7 +756,7 @@ def fetch_anilist_user_list(username: str):
             media {
               id
               idMal
-              title { romaji english }
+              title { romaji english native }
               coverImage { extraLarge }
               episodes
               genres
@@ -727,6 +768,7 @@ def fetch_anilist_user_list(username: str):
     }
     '''
     try:
+        anilist_limiter.acquire()
         response = requests.post(url, json={'query': query, 'variables': {'username': username}}, headers=COMMON_HEADERS, timeout=20)
         response.raise_for_status()
         data = response.json()
@@ -746,12 +788,15 @@ def fetch_anilist_user_list(username: str):
         for lst in lists:
             for entry in lst['entries']:
                 media = entry['media']
-                title = media['title']['romaji'] or media['title']['english']
+                title = media['title']['english'] or media['title']['romaji']
                 
                 normalized.append({
                     "anime_id": media['id'],
                     "idMal": media['idMal'],
                     "title": title,
+                    "title_english": media['title']['english'],
+                    "title_romaji": media['title']['romaji'],
+                    "title_native": media['title']['native'],
                     "image_url": media['coverImage']['extraLarge'],
                     "status": STATUS_MAP.get(entry['status'], "Plan to Watch"),
                     "score": entry['score'],

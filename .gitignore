@@ -4,6 +4,9 @@ backend/.env
 backend/uploads/*
 !backend/uploads/.gitkeep
 backend/__pycache__/
+backend/*.log
+*.log
+
 
 # Frontend
 frontend/node_modules/

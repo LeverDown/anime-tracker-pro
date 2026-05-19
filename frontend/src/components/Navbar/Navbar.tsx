@@ -13,14 +13,22 @@ import api from '../../api/client';
 import { Button, Card } from '../UI';
 import { Notification } from '../../types/anime';
 import styles from './navbar.module.css';
+import { getUserProfile } from '@/api/user';
+import { BACKEND_URL } from '@/api/client';
+
+interface NavbarProps {
+  user?: string;
+  pfp_url?: string;
+}
 
 /**
  * RONINHUB Navbar Protocol
  * Implements Top-Level Navigation with Tactical HUD aesthetics.
  */
-export default function Navbar(): JSX.Element {
+export default function Navbar({ user: propUser, pfp_url }: NavbarProps = {}): JSX.Element {
   const auth = useContext(AuthContext);
-  const user = auth?.user;
+  const contextUser = auth?.user;
+  const user = propUser || contextUser;
   const pathname = usePathname();
   
   const [mounted, setMounted] = useState<boolean>(false);
@@ -32,7 +40,23 @@ export default function Navbar(): JSX.Element {
   const profileRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
+  const [profilePfp, setProfilePfp] = useState<string | undefined>(undefined);
+
   useEffect(() => {
+    if (!pfp_url && user) {
+      getUserProfile(user).then(profile => {
+        setProfilePfp(profile?.pfp_url);
+      }).catch(err => console.error("Failed to load navbar pfp:", err));
+    }
+  }, [user, pfp_url]);
+
+  const activePfp = pfp_url || profilePfp;
+  const resolvedPfp = activePfp 
+    ? (activePfp.startsWith('/') ? `${BACKEND_URL}${activePfp}` : activePfp) 
+    : undefined;
+
+  useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setMounted(true);
     
     // Handle clicks outside to close dropdowns
@@ -48,12 +72,7 @@ export default function Navbar(): JSX.Element {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-    // Notification polling deactivated during Community Purge
-    setNotifications([]);
-    setUnreadCount(0);
-  }, [user]);
+
 
   const markRead = async (): Promise<void> => {
     // Logic deactivated
@@ -173,7 +192,20 @@ export default function Navbar(): JSX.Element {
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               >
                 <div className={styles.avatar}>
-                  {user[0].toUpperCase()}
+                  {resolvedPfp ? (
+                    <img
+                      src={resolvedPfp}
+                      alt={user}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <span style={{ display: resolvedPfp ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                    {user ? user[0].toUpperCase() : ''}
+                  </span>
                 </div>
                 <span className={styles.userName}>{user}</span>
                 <ChevronDown size={14} color="var(--text-dark)" />

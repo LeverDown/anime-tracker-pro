@@ -38,6 +38,8 @@ class User(Base):
     seasonal_theme_enabled = Column(Integer, default=0)
     custom_theme_selection = Column(String, default='Personal')
     watch_rate_per_day = Column(Integer, default=3)
+    # Phase 6: User display title preference ('english' | 'romaji' | 'native')
+    title_preference = Column(String(16), default='english', nullable=True)
 
 # --- CANONICAL SCHEMA MODELS ---
 class Anime(Base):
@@ -47,6 +49,10 @@ class Anime(Base):
     anilist_id = Column(Integer, unique=True, nullable=True)
     title_romaji = Column(String)
     title_english = Column(String)
+    # Phase 6: additional title columns
+    title_native = Column(Text, nullable=True)          # Kanji/native-script title
+    title_sort = Column(Text, nullable=True)             # Normalised sort key (compute_sort_title)
+    title_source = Column(String(16), default='official', nullable=True)  # 'official' | 'community'
     image_url = Column(String)
     format = Column(String)
     status = Column(String)
@@ -78,6 +84,19 @@ class UserAnimeList(Base):
     score_sound = Column(Float)
     series_name = Column(Text)
 
+
+# Phase 5: ID Mapping table — resolves MAL ↔ AniList IDs locally
+class IdMapping(Base):
+    __tablename__ = "id_mapping"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    mal_id = Column(Integer, unique=True, nullable=False, index=True)
+    anilist_id = Column(Integer, nullable=True, index=True)
+    kitsu_id = Column(Text, nullable=True)
+    # confidence: 'verified' | 'inferred' | 'missing'
+    confidence = Column(String(16), nullable=False, default='missing')
+    title_romaji = Column(Text, nullable=True)  # Stored for fuzzy matching reference
+    last_checked = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now())
 
 class ProviderCache(Base):
     __tablename__ = "provider_cache"
@@ -232,7 +251,7 @@ def save_anime_to_db(username, anime_id, title, image_url, status, score, episod
                 seasons_json=json.dumps(initial_season),
                 coop_friend_username=coop_friend_username if coop_friend_username != "" else None,
                 drop_reason=drop_reason if drop_reason != "" else None,
-                series_name=title
+                series_name=None
             )
             session.add(new_ul)
             
@@ -244,6 +263,12 @@ def get_user_anime(username, status_filter):
         if status_filter != "All":
             query = query.filter(UserAnimeList.status == status_filter)
         results = query.all()
+        
+        # Phase 6: fetch user's title preference (default 'english')
+        user_obj = session.query(User).filter(func.lower(User.username) == func.lower(username)).first()
+        pref = (user_obj.title_preference if user_obj else None) or "english"
+        
+        from utils.title_utils import get_display_title
         
         # Mapping back to the legacy tuple format for main.py compatibility
         # (r.username, r.anime_id, r.title, r.image_url, r.status, r.score, r.episodes, r.genres, r.review, r.progress, r.seasons_json, r.coop_friend_username, r.drop_reason, r.idMal, r.custom_tags, r.private_notes, r.score_story, r.score_art, r.score_sound, r.series_name)
@@ -260,10 +285,18 @@ def get_user_anime(username, status_filter):
             elif isinstance(a.genres, str):
                 genres_str = a.genres
 
+            # Phase 6: computed display title honouring user preference
+            display_title = get_display_title(
+                getattr(a, 'title_english', None),
+                getattr(a, 'title_romaji', None),
+                getattr(a, 'title_native', None),
+                pref
+            ) or a.title_romaji or ""
+
             output.append((
                 ul.user_id,             # 0: username
                 aid,                    # 1: anime_id
-                a.title_romaji,         # 2: title
+                display_title,          # 2: title (dynamically resolved)
                 a.image_url,            # 3: image_url
                 ul.status,              # 4: status
                 ul.score,               # 5: score
@@ -410,33 +443,81 @@ def batch_import_anime(username, data_list):
     with get_db() as session:
         if not data_list:
             return stats
-            
+
         import uuid
-        
+        from utils.title_utils import compute_sort_title
+
+        # Phase 5: pre-resolve all MAL IDs to AniList IDs in bulk
+        # (uses the local id_mapping table first, only calls AniList for unknowns)
+        mal_ids = []
+        anilist_id_map: dict = {}
+
+        # Bulk populate id_mapping table from incoming AniList sync data if available,
+        # and build our immediate map to avoid API lookups entirely.
+        for item in data_list:
+            mal_id = item.get('idMal')
+            anilist_id = item.get('anime_id')
+            if mal_id and anilist_id:
+                anilist_id_map[mal_id] = anilist_id
+                # Bulk persist mapping to database so it is saved locally
+                try:
+                    from services.id_mapping_service import _upsert_mapping
+                    _upsert_mapping(session, mal_id, anilist_id, "verified", item.get('title_romaji'))
+                except Exception as _e:
+                    pass
+            elif mal_id:
+                mal_ids.append(mal_id)
+
+        # For any remaining MAL IDs (e.g. from MAL XML imports), use batch resolver
+        if mal_ids:
+            try:
+                from services.id_mapping_service import batch_resolve_ids
+                resolved_map = batch_resolve_ids(mal_ids)
+                anilist_id_map.update(resolved_map)
+            except Exception as _e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "batch_import_anime: id_mapping_service unavailable (%s). Proceeding without pre-resolution.", _e
+                )
+
         # 1. Bulk Upsert Anime Table
         anime_params = []
         for item in data_list:
             # We assume mal_id is provided by the XML import
             mal_id = item.get('idMal')
             if not mal_id: continue
-            
+
+            # Phase 6: distinct titles extraction with fallback
+            title_english_val = item.get('title_english') or item.get('title')
+            title_romaji_val = item.get('title_romaji') or item.get('title')
+            title_native_val = item.get('title_native')
+            title_sort_val = compute_sort_title(title_english_val or title_romaji_val or '')
+
             anime_params.append({
                 "id": str(uuid.uuid4()),
                 "mal_id": mal_id,
-                "title_english": item['title'],
-                "title_romaji": item['title'],
+                # Phase 5: include anilist_id when already resolved
+                "anilist_id": anilist_id_map.get(mal_id),
+                "title_english": title_english_val,
+                "title_romaji": title_romaji_val,
+                "title_native": title_native_val,
+                "title_sort": title_sort_val,   # Phase 6: stable sort key
                 "image_url": item.get('image_url', ''),
                 "episodes": item.get('episodes', 0),
                 "status": "FINISHED"
             })
-            
+
         if anime_params:
             session.execute(text("""
-                INSERT INTO anime (id, mal_id, title_english, title_romaji, image_url, episodes, status)
-                VALUES (:id, :mal_id, :title_english, :title_romaji, :image_url, :episodes, :status)
-                ON CONFLICT (mal_id) DO UPDATE SET 
-                    title_english = COALESCE(anime.title_english, EXCLUDED.title_english),
-                    episodes = GREATEST(anime.episodes, EXCLUDED.episodes)
+                INSERT INTO anime (id, mal_id, anilist_id, title_english, title_romaji, title_native, title_sort, image_url, episodes, status)
+                VALUES (:id, :mal_id, :anilist_id, :title_english, :title_romaji, :title_native, :title_sort, :image_url, :episodes, :status)
+                ON CONFLICT (mal_id) DO UPDATE SET
+                    title_english = COALESCE(EXCLUDED.title_english, anime.title_english),
+                    title_romaji  = COALESCE(EXCLUDED.title_romaji, anime.title_romaji),
+                    title_native  = COALESCE(EXCLUDED.title_native, anime.title_native),
+                    title_sort    = COALESCE(EXCLUDED.title_sort, anime.title_sort),
+                    anilist_id    = COALESCE(EXCLUDED.anilist_id, anime.anilist_id),
+                    episodes      = GREATEST(anime.episodes, EXCLUDED.episodes)
             """), anime_params)
             
         # 2. Bulk Upsert UserAnimeList Table

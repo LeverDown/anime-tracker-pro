@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-export const BACKEND_URL = 'http://localhost:8000';
+const apiURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+export const BACKEND_URL = apiURL.replace(/\/api$/, '').replace(/\/$/, '');
 
 const api = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: apiURL,
   timeout: 30000,
   withCredentials: true,
 });
